@@ -1,0 +1,4 @@
+.venv/
+playground
+plot_patterns/
+__pycache__/
