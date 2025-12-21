@@ -90,7 +90,9 @@ class VPlotter:
         self.servo_pwm.stop()
 
         # Turn off motor pins
+        GPIO.setmode(GPIO.BCM)
         for pin in VPlotter.MOTOR_PINS[0] + VPlotter.MOTOR_PINS[1]:
+            GPIO.setup(pin, GPIO.OUT)
             GPIO.output(pin, GPIO.LOW)
         GPIO.cleanup()
 
@@ -122,17 +124,17 @@ class VPlotter:
     def pen_up(self):
         """Raise the pen."""
         self.servo_pwm.ChangeDutyCycle(VPlotter.PEN_UP_DUTY)
+        self.z = 1
         time.sleep(0.3)  # Give servo time to move
         self.servo_pwm.ChangeDutyCycle(0)  # Stop sending signal to prevent jitter
-        self.z = 1
         print("Pen UP")
 
     def pen_down(self):
         """Lower the pen."""
         self.servo_pwm.ChangeDutyCycle(VPlotter.PEN_DOWN_DUTY)
+        self.z = 0
         time.sleep(0.3)  # Give servo time to move
         self.servo_pwm.ChangeDutyCycle(0)  # Stop sending signal to prevent jitter
-        self.z = 0
         print("Pen DOWN")
 
     def interpolate_z(self, start_z, end_z, num_steps):
@@ -169,8 +171,8 @@ class VPlotter:
         # compute target string lengths
         tstring = self.calculate_string_lengths(target_x, target_y)
         print("-" * 50)
-        print("current", self.string_lengths)
-        print("target", tstring)
+        print("current", self.string_lengths, self.z)
+        print("target", tstring, target_z)
 
         # get number of steps for moving to target
         steps = [

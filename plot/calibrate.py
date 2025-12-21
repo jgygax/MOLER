@@ -39,7 +39,7 @@ def calibrate_servo(duty_cycle):
         plotter = VPlotter()
         print(f"Setting servo to duty cycle: {duty_cycle}%")
         plotter.servo_pwm.ChangeDutyCycle(duty_cycle)
-        time.sleep(5)  # Hold position for observation
+        time.sleep(5)  # Allow time to observe position
         plotter.servo_pwm.ChangeDutyCycle(0)  # Stop signal
 
     except KeyboardInterrupt:
