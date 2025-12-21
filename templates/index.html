@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MOLER Control</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>MOLER Control</h1>
+        
+        <div class="upload-section">
+            <h2>Upload YAML File</h2>
+            <input type="file" id="fileInput" accept=".yaml,.yml">
+            <button onclick="uploadFile()">Plot</button>
+            <div id="uploadMessage" class="message"></div>
+        </div>
+        
+        <div class="control-section">
+            <h2>Controls</h2>
+            <div class="controls">
+                <button onclick="sendControl('left_up')">Left Up</button>
+                <button onclick="sendControl('right_up')">Right Up</button>
+                <button onclick="sendControl('left_down')">Left Down</button>
+                <button onclick="sendControl('right_down')">Right Down</button>
+                <button onclick="sendControl('servo')">Servo</button>
+            </div>
+            
+            <div class="slider-container">
+                <label>
+                    Speed: <span id="speedValue" class="speed-value">100</span>
+                </label>
+                <input type="range" id="speedSlider" min="1" max="1000" value="100" oninput="updateSpeed()">
+            </div>
+            
+            <div id="controlMessage" class="message"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
