@@ -24,18 +24,31 @@ def plot_pattern():
         print("Plotting finished, GPIO cleaned up")
 
 
-def plot_from_file(data):
+def plot_from_file(
+    data,
+    pos_scale=10,
+):
     try:
         plotter = VPlotter()
-        plotter.update_self_position(12, 16)
+        plotter.move_straight_line(20, 20, 1)
         print("--->", plotter.x, plotter.y)
 
         lines = data["lines"]
-        line_points = [[(p["x"], p["y"]) for p in line["points"]] for line in lines]
+        line_points = [
+            [(p["x"], p["y"], p["w"]) for p in line["points"]] for line in lines
+        ]
         for line in line_points:
-            for x, y in line:
-                plotter.move_straight_line(x/10+12, y/10+16)
-                print("--->", plotter.x, plotter.y)
+            x, y, w = line[0]
+            plotter.move_straight_line(x / pos_scale, y / pos_scale, 1)
+            print("--->", plotter.x, plotter.y, plotter.z)
+            plotter.pen_down()
+            for x, y, w in line[1:]:
+                plotter.move_straight_line(x / pos_scale, y / pos_scale, 1-w)
+                print("--->", plotter.x, plotter.y, plotter.z)
+            plotter.pen_up()
+        plotter.pen_up()
+        plotter.move_straight_line(20, 20, 1)
+        plotter.move_straight_line(20, 12.5, 1)
 
     except KeyboardInterrupt:
         print("\nStopping plotter...")
