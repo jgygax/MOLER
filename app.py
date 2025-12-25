@@ -40,6 +40,7 @@ def servo(duty_cycle):
     calibrate.calibrate_servo(duty_cycle)
     return {"status": "success", "action": "servo", "duty_cycle": duty_cycle}
 
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -80,7 +81,7 @@ def control():
         actual_speed = speed if direction == "right_up" else -speed
         result = right(actual_speed)
     elif direction == "servo":
-        result = servo(speed/10)
+        result = servo(speed / 10)
     else:
         return jsonify({"error": "Invalid direction"}), 400
 

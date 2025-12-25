@@ -5,21 +5,7 @@ import RPi.GPIO as GPIO
 from RpiMotorLib import RpiMotorLib
 
 
-# TODO: Bändelispitz und Stift sind nicht am selben Punkt -> Korrekturfaktor einbauen
-
-
-class VPlotter:
-    # Motor configurations
-    MOTOR_PINS = {
-        0: [23, 24, 25, 8],  # Left motor pins
-        1: [5, 6, 13, 26],  # Right motor pins
-    }
-    MOTOR_DISTANCE = 40  # Distance between motors in cm
-    STEPS_PER_REVOLUTION = 4096  # 28BYJ-48 has ~512 steps per full revolution
-    SPOOL_CIRCUMFERENCE = 12.5  # Circumference of spool in cm
-    UPDATE_INTERVAL = 0.0016  # Tick interval in seconds
-
-    # Half-step sequence for smoother motion
+class StepperMotor:
     HALF_STEP_SEQUENCE = [
         [1, 0, 0, 0],
         [1, 1, 0, 0],
@@ -31,6 +17,94 @@ class VPlotter:
         [1, 0, 0, 1],
     ]
 
+    def __init__(
+        self,
+        pins,
+        speed_up=1,
+        speed_down=1,
+        up_direction=1,
+        initial_string_length=0,
+        spool_circumference=12.5,
+        steps_per_revolution=4096,
+    ):
+        self.pins = pins
+        self.speed_up = speed_up
+        self.speed_down = speed_down
+        self.up_direction = up_direction
+        self.initial_string_length = initial_string_length
+        self.spool_circumference = spool_circumference
+        self.steps_per_revolution = steps_per_revolution
+        self.revolutions = self.get_revolutions(initial_string_length)
+
+        self.index = 0
+        self.last_step_time = time.time()
+
+    def step(self, direction=1):
+        """Steps the motor one step in the given direction, will sleep until it's time to step"""
+        # Different speeds for moving up or down
+        if direction == self.up_direction:
+            speed = self.speed_up
+        else:
+            speed = self.speed_down
+
+        update_interval = speed / self.steps_per_revolution
+
+        # Wait until it's time to step
+        current_time = time.time()
+        sleep_time = update_interval - (current_time - self.last_step_time)
+        if sleep_time > 0:
+            time.sleep(sleep_time)
+        self.last_step_time = current_time
+
+        # Step
+        self.index = (self.index + direction) % len(self.HALF_STEP_SEQUENCE)
+        for pin, value in zip(self.pins, self.HALF_STEP_SEQUENCE[self.index]):
+            GPIO.output(pin, value)
+
+        # Update internal position
+        self.revolutions += direction / self.steps_per_revolution
+
+    def count_steps_to_target(self, target_string_length):
+        """Will return number of steps to get as close to the target string length as possible"""
+
+        return round(
+            abs(self.get_revolutions(target_string_length) - self.revolutions) * self.steps_per_revolution
+        )
+
+    def move_to_target(self, target_string_length):
+        """Moves to target string length, and blocks if needed"""
+        current_string_length = self.get_sting_length()
+        if target_string_length < current_string_length:
+            direction = self.up_direction
+        else:
+            direction = -self.up_direction
+
+        for _ in range(self.count_steps_to_target(target_string_length)):
+            self.step(direction)
+
+    def get_revolutions(self, string_length):
+        return string_length / self.spool_circumference
+
+    def get_sting_length(self):
+        return self.initial_string_length + self.revolutions * self.spool_circumference
+
+
+class VPlotter:
+    # Motor configurations
+    MOTOR_PINS = {
+        0: [23, 24, 25, 8],  # Left motor pins
+        1: [5, 6, 13, 26],  # Right motor pins
+    }
+    SPEED_UP = 1  # Revolutions per second
+    SPEED_DOWN = 1  # Revolutions per second
+
+    MOTOR_DISTANCE = 40  # Distance between motors in cm
+
+    TOP = 10
+    LEFT = 10
+    BOTTOM = 30
+    RIGHT = 30
+
     # Servo configuration
     SERVO_PIN = 10
     SERVO_FREQUENCY = 50  # Standard servo frequency (50Hz)
@@ -41,10 +115,18 @@ class VPlotter:
     PEN_DOWN_DUTY = 2  # Adjust these values (2.5-12.5) based on your servo
 
     def __init__(self):
-        self.update_interval = [VPlotter.UPDATE_INTERVAL, VPlotter.UPDATE_INTERVAL]
-
-        self.direction = [-1, 1]
-        self.seq_idx = [0, 0]
+        self.left_motor = StepperMotor(
+            VPlotter.SPEED_UP,
+            VPlotter.SPEED_DOWN,
+            VPlotter.MOTOR_PINS[0],
+            VPlotter.STEPS_PER_REVOLUTION,
+        )
+        self.right_motor = StepperMotor(
+            VPlotter.SPEED_UP,
+            VPlotter.SPEED_DOWN,
+            VPlotter.MOTOR_PINS[1],
+            VPlotter.STEPS_PER_REVOLUTION,
+        )
 
         self.x = VPlotter.MOTOR_DISTANCE / 2
         self.y = 12.5
@@ -65,13 +147,6 @@ class VPlotter:
 
         # Initialize pen in up position
         self.pen_up()
-
-    def update_self_position(self, x, y, z):
-        """Update the internal position state."""
-        self.x = x
-        self.y = y
-        self.z = z
-        self.string_lengths = self.calculate_string_lengths(x, y)
 
     def setup_gpio(self):
         """Set up GPIO pins for both motors."""
@@ -96,30 +171,40 @@ class VPlotter:
             GPIO.output(pin, GPIO.LOW)
         GPIO.cleanup()
 
-    def calculate_string_lengths(self, x, y):
+    @classmethod
+    def calculate_string_lengths(cls, x, y):
         """Calculate string lengths for given x,y coordinates"""
         # Origin is in the middle of the line between the two motors
         # y increases from top to bottom
 
         s_left = (x**2 + y**2) ** 0.5
-        s_right = ((VPlotter.MOTOR_DISTANCE - x) ** 2 + y**2) ** 0.5
+        s_right = ((cls.MOTOR_DISTANCE - x) ** 2 + y**2) ** 0.5
 
         if s_left < 0 or s_right < 0:
             raise ValueError("strings must be longer than 0 cm")
 
         return s_left, s_right
 
-    def make_step(self, motor):
-        """Execute one step for the specified motor."""
-        # Update sequence index
-        self.seq_idx[motor] = (self.seq_idx[motor] + self.direction[motor] + 8) % 8
+    @classmethod
+    def calculate_coords(cls, s_left, s_right):
+        """Calculate x,y coordinates from given string lengths"""
 
-        # Apply the step pattern
-        for i in range(4):
-            GPIO.output(
-                VPlotter.MOTOR_PINS[motor][i],
-                VPlotter.HALF_STEP_SEQUENCE[self.seq_idx[motor]][i],
-            )
+        if s_left < 0 or s_right < 0:
+            raise ValueError("string lengths must be positive")
+
+        if s_left + s_right < cls.MOTOR_DISTANCE:
+            raise ValueError("string lengths too short to reach between motors")
+
+        x = (s_left**2 - s_right**2 + cls.MOTOR_DISTANCE**2) / (2 * cls.MOTOR_DISTANCE)
+
+        y_squared = s_left**2 - x**2
+
+        if y_squared < 0:
+            raise ValueError("invalid string lengths - no valid position exists")
+
+        y = y_squared**0.5
+
+        return x, y
 
     def pen_up(self):
         """Raise the pen."""
@@ -165,99 +250,37 @@ class VPlotter:
         end_duty = max(0.0, min(100.0, end_duty))
         self.servo_pwm.ChangeDutyCycle(end_duty)
 
+    @staticmethod
+    def interpolate(start, end, progression):
+        return start + (end - start) * progression
+
     def move_straight_line(self, target_x, target_y, target_z):
         """Move to target position in a straight line with smooth z interpolation."""
 
+        start_left = self.left_motor.get_sting_length()
+        start_right = self.right_motor.get_sting_length()
+        start_z = self.z
+
         # compute target string lengths
-        tstring = self.calculate_string_lengths(target_x, target_y)
-        print("-" * 50)
-        print("current", self.string_lengths, self.z)
-        print("target", tstring, target_z)
+        target_left, target_right = self.calculate_string_lengths(target_x, target_y)
+        n_steps_left = self.left_motor.get_steps_to_target(target_left)
+        n_steps_right = self.right_motor.get_steps_to_target(target_right)
 
-        # get number of steps for moving to target
-        steps = [
-            (tstring[i] - self.string_lengths[i]) * self.steps_per_cm for i in range(2)
-        ]
-        print("steps", steps)
+        max_steps = max(abs(n_steps_left), abs(n_steps_right))
+        for i in range(max_steps):
+            progress = i / max_steps
 
-        # get direction of movement
-        self.direction[0] = -1 if steps[0] > 0 else 1
-        self.direction[1] = 1 if steps[1] > 0 else -1
+            # Update steppers, steppers will block / sleep when needed
+            self.left_motor.move_to_target(
+                self.interpolate(start_left, target_left, progress)
+            )
+            self.right_motor.move_to_target(
+                self.interpolate(start_right, target_right, progress)
+            )
 
-        # compute movement speed
-        self.update_interval = [VPlotter.UPDATE_INTERVAL, VPlotter.UPDATE_INTERVAL]
-        if steps[0] != 0 and steps[1] != 0:
-            if abs(steps[0]) > abs(steps[1]):
-                self.update_interval[1] = (
-                    abs(steps[0] / steps[1]) * self.update_interval[0]
-                )
-            else:
-                self.update_interval[0] = (
-                    abs(steps[1] / steps[0]) * self.update_interval[1]
-                )
-
-        print("update", self.update_interval)
-
-        # Start motor threads
-        motor_threads = [
-            threading.Thread(target=self.move_motor, args=(motor, steps[motor]))
-            for motor in range(2)
-        ]
-
-        # Start z interpolation thread
-        z_thread = threading.Thread(
-            target=self.interpolate_z,
-            args=(self.z, target_z, abs(steps[0])),
-        )
-
-        for motor_thread in motor_threads:
-            motor_thread.start()
-        z_thread.start()
-
-        for motor_thread in motor_threads:
-            motor_thread.join()
-        z_thread.join()
-
-        self._update_pos(target_x, target_y, target_z)
-
-    def _update_pos(self, x, y, z):
-        """Update internal position."""
-        self.x = x
-        self.y = y
-        self.z = z
-        self.string_lengths = self.calculate_string_lengths(x, y)
-
-    def move_motor(self, motor, n_steps):
-        """Move a single motor by n_steps."""
-        for _ in range(abs(int(n_steps))):
-            start_time = time.time()
-            self.make_step(motor)
-
-            elapsed = time.time() - start_time
-            sleep_time = max(0, self.update_interval[motor] - elapsed)
-            time.sleep(sleep_time)
-
-    def move_single_motor(self, motor, speed):
-        """Move a single motor at specified speed (for calibration)."""
-
-        # get number of steps for moving to target
-        steps = [0, 0]
-        steps[motor] = abs(speed)
-        print("steps", steps)
-
-        # get direction of movement
-        self.direction[motor] = -1 if speed > 0 else 1
-
-        # compute movement speed
-        self.update_interval = [VPlotter.UPDATE_INTERVAL, VPlotter.UPDATE_INTERVAL]
-
-        print("update", self.update_interval[motor])
-
-        motor_thread = threading.Thread(
-            target=self.move_motor, args=(motor, steps[motor])
-        )
-
-        motor_thread.start()
-        motor_thread.join()
-
-        # TODO: update position accordingly
+            # Update servo
+            z = self.interpolate(start_z, target_z, progress)
+            duty_cycle = self.interpolate(
+                VPlotter.PEN_DOWN_DUTY, VPlotter.PEN_UP_DUTY, z
+            )
+            self.servo_pwm.ChangeDutyCycle(duty_cycle)

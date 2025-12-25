@@ -43,7 +43,7 @@ def plot_from_file(
             print("--->", plotter.x, plotter.y, plotter.z)
             plotter.pen_down()
             for x, y, w in line[1:]:
-                plotter.move_straight_line(x / pos_scale, y / pos_scale, 1-w)
+                plotter.move_straight_line(x / pos_scale, y / pos_scale, 1 - w)
                 print("--->", plotter.x, plotter.y, plotter.z)
             plotter.pen_up()
         plotter.pen_up()
