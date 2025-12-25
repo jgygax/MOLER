@@ -1,8 +1,53 @@
 import math
 import threading
 import time
-import RPi.GPIO as GPIO
-from RpiMotorLib import RpiMotorLib
+import cv2
+import numpy as np
+
+try:
+    import RPi.GPIO as GPIO
+    from RpiMotorLib import RpiMotorLib
+except ImportError:
+    print("Hardware libraries not found, using mocks")
+
+    class MockGPIO:
+        BCM = "BCM"
+        OUT = "OUT"
+        LOW = "LOW"
+        HIGH = "HIGH"
+        IN = "IN"
+
+        @staticmethod
+        def setmode(mode):
+            pass
+
+        @staticmethod
+        def setup(pin, mode):
+            pass
+
+        @staticmethod
+        def output(pin, value):
+            pass
+
+        @staticmethod
+        def cleanup():
+            pass
+
+        class PWM:
+            def __init__(self, pin, frequency):
+                pass
+
+            def start(self, duty_cycle):
+                pass
+
+            def stop(self):
+                pass
+
+            def ChangeDutyCycle(self, duty_cycle):
+                pass
+
+    GPIO = MockGPIO
+    RpiMotorLib = object
 
 
 class StepperMotor:
@@ -62,22 +107,23 @@ class StepperMotor:
             GPIO.output(pin, value)
 
         # Update internal position
-        self.revolutions += direction / self.steps_per_revolution
+        self.revolutions += self.up_direction * direction / self.steps_per_revolution
 
     def count_steps_to_target(self, target_string_length):
         """Will return number of steps to get as close to the target string length as possible"""
 
         return round(
-            abs(self.get_revolutions(target_string_length) - self.revolutions) * self.steps_per_revolution
+            abs(self.get_revolutions(target_string_length) - self.revolutions)
+            * self.steps_per_revolution
         )
 
     def move_to_target(self, target_string_length):
         """Moves to target string length, and blocks if needed"""
         current_string_length = self.get_sting_length()
         if target_string_length < current_string_length:
-            direction = self.up_direction
-        else:
             direction = -self.up_direction
+        else:
+            direction = self.up_direction
 
         for _ in range(self.count_steps_to_target(target_string_length)):
             self.step(direction)
@@ -86,7 +132,7 @@ class StepperMotor:
         return string_length / self.spool_circumference
 
     def get_sting_length(self):
-        return self.initial_string_length + self.revolutions * self.spool_circumference
+        return self.revolutions * self.spool_circumference
 
 
 class VPlotter:
@@ -100,11 +146,6 @@ class VPlotter:
 
     MOTOR_DISTANCE = 40  # Distance between motors in cm
 
-    TOP = 10
-    LEFT = 10
-    BOTTOM = 30
-    RIGHT = 30
-
     # Servo configuration
     SERVO_PIN = 10
     SERVO_FREQUENCY = 50  # Standard servo frequency (50Hz)
@@ -114,25 +155,38 @@ class VPlotter:
     PEN_UP_DUTY = 12  # Adjust these values (2.5-12.5) based on your servo
     PEN_DOWN_DUTY = 2  # Adjust these values (2.5-12.5) based on your servo
 
-    def __init__(self):
-        self.left_motor = StepperMotor(
-            VPlotter.SPEED_UP,
-            VPlotter.SPEED_DOWN,
-            VPlotter.MOTOR_PINS[0],
-            VPlotter.STEPS_PER_REVOLUTION,
-        )
-        self.right_motor = StepperMotor(
-            VPlotter.SPEED_UP,
-            VPlotter.SPEED_DOWN,
-            VPlotter.MOTOR_PINS[1],
-            VPlotter.STEPS_PER_REVOLUTION,
-        )
+    STEPS_PER_REVOLUTION = 4096
+    SPOOL_CIRCUMFERENCE = 12.5  # cm
 
+    # Visualization settings
+    PIXELS_PER_CM = 10
+    MAX_CIRCLE_DIAMETER_CM = 1.0
+
+    CURRENT_INSTANCE = None
+
+    def __init__(self):
         self.x = VPlotter.MOTOR_DISTANCE / 2
         self.y = 12.5
         self.z = 1  # pen up position
 
-        self.string_lengths = self.calculate_string_lengths(self.x, self.y)
+        string_left, string_right = self.calculate_string_lengths(self.x, self.y)
+
+        self.left_motor = StepperMotor(
+            pins=VPlotter.MOTOR_PINS[0],
+            speed_up=VPlotter.SPEED_UP,
+            speed_down=VPlotter.SPEED_DOWN,
+            initial_string_length=string_left,
+            steps_per_revolution=VPlotter.STEPS_PER_REVOLUTION,
+            spool_circumference=VPlotter.SPOOL_CIRCUMFERENCE,
+        )
+        self.right_motor = StepperMotor(
+            pins=VPlotter.MOTOR_PINS[1],
+            speed_up=VPlotter.SPEED_UP,
+            speed_down=VPlotter.SPEED_DOWN,
+            initial_string_length=string_right,
+            steps_per_revolution=VPlotter.STEPS_PER_REVOLUTION,
+            spool_circumference=VPlotter.SPOOL_CIRCUMFERENCE,
+        )
 
         # Steps per cm calculation
         self.steps_per_cm = VPlotter.STEPS_PER_REVOLUTION / VPlotter.SPOOL_CIRCUMFERENCE
@@ -147,6 +201,15 @@ class VPlotter:
 
         # Initialize pen in up position
         self.pen_up()
+
+        # Initialize OpenCV canvas
+        canvas_width = int(VPlotter.MOTOR_DISTANCE * VPlotter.PIXELS_PER_CM)
+        canvas_height = int(40 * VPlotter.PIXELS_PER_CM)  # 40 cm height
+        self.canvas = (
+            np.ones((canvas_height, canvas_width, 3), dtype=np.uint8) * 255
+        )  # White background
+
+        VPlotter.CURRENT_INSTANCE = self
 
     def setup_gpio(self):
         """Set up GPIO pins for both motors."""
@@ -171,6 +234,9 @@ class VPlotter:
             GPIO.output(pin, GPIO.LOW)
         GPIO.cleanup()
 
+        # Close OpenCV window
+        cv2.destroyAllWindows()
+
     @classmethod
     def calculate_string_lengths(cls, x, y):
         """Calculate string lengths for given x,y coordinates"""
@@ -189,6 +255,8 @@ class VPlotter:
     def calculate_coords(cls, s_left, s_right):
         """Calculate x,y coordinates from given string lengths"""
 
+        print("CALCCOORDS", s_left, s_right)
+
         if s_left < 0 or s_right < 0:
             raise ValueError("string lengths must be positive")
 
@@ -205,6 +273,11 @@ class VPlotter:
         y = y_squared**0.5
 
         return x, y
+
+    def get_current_coords(self):
+        return self.calculate_coords(
+            self.left_motor.get_sting_length(), self.right_motor.get_sting_length()
+        )
 
     def pen_up(self):
         """Raise the pen."""
@@ -257,18 +330,28 @@ class VPlotter:
     def move_straight_line(self, target_x, target_y, target_z):
         """Move to target position in a straight line with smooth z interpolation."""
 
+        print("MOVETO", target_x, target_y, target_z)
         start_left = self.left_motor.get_sting_length()
         start_right = self.right_motor.get_sting_length()
         start_z = self.z
 
         # compute target string lengths
         target_left, target_right = self.calculate_string_lengths(target_x, target_y)
-        n_steps_left = self.left_motor.get_steps_to_target(target_left)
-        n_steps_right = self.right_motor.get_steps_to_target(target_right)
+        n_steps_left = self.left_motor.count_steps_to_target(target_left)
+        n_steps_right = self.right_motor.count_steps_to_target(target_right)
 
         max_steps = max(abs(n_steps_left), abs(n_steps_right))
         for i in range(max_steps):
             progress = i / max_steps
+
+            print(
+                "STEP",
+                self.interpolate(start_left, target_left, progress),
+                self.interpolate(start_right, target_right, progress),
+                self.interpolate(start_z, target_z, progress),
+                self.left_motor.get_sting_length(),
+                self.right_motor.get_sting_length(),
+            )
 
             # Update steppers, steppers will block / sleep when needed
             self.left_motor.move_to_target(
@@ -284,3 +367,32 @@ class VPlotter:
                 VPlotter.PEN_DOWN_DUTY, VPlotter.PEN_UP_DUTY, z
             )
             self.servo_pwm.ChangeDutyCycle(duty_cycle)
+
+            # Visualization: Calculate current position and draw on canvas
+            current_left = self.left_motor.get_sting_length()
+            current_right = self.right_motor.get_sting_length()
+
+            try:
+                # Get current x, y coordinates
+                current_x, current_y = self.calculate_coords(
+                    current_left, current_right
+                )
+
+                # Convert to pixel coordinates (10 pixels per cm)
+                pixel_x = int(current_x * VPlotter.PIXELS_PER_CM)
+                pixel_y = int(current_y * VPlotter.PIXELS_PER_CM)
+
+                # Calculate circle radius based on z (inverted: z=1 means pen up/small, z=0 means pen down/large)
+                # z ranges from 0 (down) to 1 (up)
+                # We want larger circles when pen is down (z=0)
+                circle_diameter_cm = VPlotter.MAX_CIRCLE_DIAMETER_CM * (1 - z)
+                radius_pixels = int((circle_diameter_cm / 3) * VPlotter.PIXELS_PER_CM)
+
+                # Draw circle on canvas (BGR format: blue color)
+                if radius_pixels > 0:
+                    cv2.circle(
+                        self.canvas, (pixel_x, pixel_y), radius_pixels, (255, 0, 0), -1
+                    )
+
+            except ValueError as e:
+                print(f"Warning: Could not calculate coordinates: {e}")

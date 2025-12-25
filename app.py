@@ -3,6 +3,11 @@ import yaml
 import os
 from plot.plot import plot_from_file
 from plot import calibrate
+from plot.vplotter import VPlotter
+import threading
+import cv2
+import base64
+import numpy as np
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "uploads"
@@ -14,10 +19,15 @@ os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
 # Placeholder functions
 def plot(parsed_data):
-    """Placeholder function for plotting"""
-    print(f"Plot called with data: {parsed_data}")
-    plot_from_file(parsed_data)
-    return {"status": "success", "message": "Plot function called", "data": parsed_data}
+    """Start plotting in a background thread"""
+    print(f"Starting plot thread with data")
+    thread = threading.Thread(target=plot_from_file, args=(parsed_data,))
+    thread.start()
+    return {
+        "status": "success",
+        "message": "Plot started in background",
+        "data": parsed_data,
+    }
 
 
 def left(speed):
@@ -86,6 +96,32 @@ def control():
         return jsonify({"error": "Invalid direction"}), 400
 
     return jsonify(result), 200
+
+
+@app.route("/status")
+def status():
+    plotter = VPlotter.CURRENT_INSTANCE
+
+    if plotter is None:
+        return jsonify({"active": False, "x": 0, "y": 0, "z": 1})
+
+    # Get current state
+    plotter_x, plotter_y = plotter.get_current_coords()
+    state = {"active": True, "x": plotter_x, "y": plotter_y, "z": plotter.z}
+
+    # Encode canvas if it exists
+    if hasattr(plotter, "canvas") and plotter.canvas is not None:
+        try:
+            # Resize for faster transfer if needed, but 400x300 isn't huge
+            # Encode as JPEG
+            retval, buffer = cv2.imencode(".jpg", plotter.canvas)
+            if retval:
+                jpg_as_text = base64.b64encode(buffer).decode("utf-8")
+                state["canvas"] = jpg_as_text
+        except Exception as e:
+            print(f"Error encoding canvas: {e}")
+
+    return jsonify(state)
 
 
 if __name__ == "__main__":
