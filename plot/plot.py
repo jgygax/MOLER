@@ -1,57 +1,79 @@
-from plot.vplotter import VPlotter
-from plot.patterns import plot_cool_pattern, plot_square, plot_circle, plot_house
-import yaml
+import logging
+
+# Configure logger for this module
+logger = logging.getLogger(__name__)
 
 
-def plot_pattern():
-    try:
-        r = 15
-        cx = 17
-        cy = 23
-        plotter = VPlotter()
+def execute_move_sequence(plotter, target, stop_event=None, speed_mulitplier=None):
+    if stop_event and stop_event.is_set():
+        return
 
-        # plot_square(plotter, r, cx, cy)
-        # plotter.move_straight_line(cx, cy)
-        # plot_circle(plotter, r, cx, cy)
-        # plotter.move_straight_line(cx, cy)
-        plot_cool_pattern(plotter, r, cx, cy)
+    # Always pen up first
+    plotter.pen_up()
 
-    except KeyboardInterrupt:
-        print("\nStopping plotter...")
-    finally:
-        plotter.move_straight_line(cx, cy)
-        plotter.cleanup()
-        print("Plotting finished, GPIO cleaned up")
+    # Get coordinate definitions
+    start_x, start_y = plotter.START_POSITION
+    dock_x, dock_y = plotter.DOCK_POSITION
+
+    if target == "start":
+        # Just move to start (after pen up)
+        if stop_event and stop_event.is_set():
+            return
+        plotter.move_straight_line(
+            start_x, start_y, 0, speed_mulitplier=speed_mulitplier
+        )
+
+    elif target == "dock":
+        # Move to start first
+        if stop_event and stop_event.is_set():
+            return
+        plotter.move_straight_line(
+            start_x, start_y, 0, speed_mulitplier=speed_mulitplier
+        )
+
+        # Then move to dock
+        if stop_event and stop_event.is_set():
+            return
+        # Go a bit above, and jiggle back to position
+        plotter.move_straight_line(
+            dock_x, dock_y - 10, 0, speed_mulitplier=speed_mulitplier
+        )
+        # set strings to known positions
+        plotter.set_current_position(*plotter.DOCK_POSITION)
 
 
-def plot_from_file(
-    data,
-    pos_scale=10,
-):
-    try:
-        plotter = VPlotter()
-        plotter.move_straight_line(20, 20, 1)
-        print("--->", plotter.x, plotter.y)
+def plot_pattern(plotter, pattern, stop_event=None, home_distance=1000):
+    if stop_event and stop_event.is_set():
+        return
 
-        lines = data["lines"]
-        line_points = [
-            [(p["x"], p["y"], p["w"]) for p in line["points"]] for line in lines
-        ]
-        for line in line_points:
-            x, y, w = line[0]
-            plotter.move_straight_line(x / pos_scale, y / pos_scale, 1)
-            print("--->", plotter.x, plotter.y, plotter.z)
-            plotter.pen_down()
-            for x, y, w in line[1:]:
-                plotter.move_straight_line(x / pos_scale, y / pos_scale, 1-w)
-                print("--->", plotter.x, plotter.y, plotter.z)
-            plotter.pen_up()
+    # Pen Up before starting specific pattern sequence
+    plotter.pen_up()
+
+    total_distance = 0
+
+    for line in pattern["lines"]:
+        if stop_event and stop_event.is_set():
+            break
+
+        total_distance += line["length"]
+        logger.debug(total_distance)
+        points = line["points"]
+
+        # Move to first point of the line
+        start_x, start_y = points[0]["x"], points[0]["y"]
         plotter.pen_up()
-        plotter.move_straight_line(20, 20, 1)
-        plotter.move_straight_line(20, 12.5, 1)
+        plotter.move_straight_line(start_x, start_y)
+        plotter.pen_down()
 
-    except KeyboardInterrupt:
-        print("\nStopping plotter...")
-    finally:
-        plotter.cleanup()
-        print("Plotting finished, GPIO cleaned up")
+        # Plot points
+        for point in points:
+            if stop_event and stop_event.is_set():
+                break
+            x, y, w = point["x"], point["y"], point["w"]
+            plotter.move_straight_line(x, y, w)
+
+        plotter.pen_up()
+
+        if home_distance and total_distance > home_distance:
+            execute_move_sequence(plotter, "dock", stop_event, speed_mulitplier=1.5)
+            total_distance = 0

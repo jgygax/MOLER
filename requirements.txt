@@ -1,2 +1,9 @@
 Flask
 PyYAML
+python-dotenv
+opencv-python
+numpy
+flask-socketio
+eventlet
+requests
+Pillow

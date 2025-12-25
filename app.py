@@ -1,91 +1,62 @@
-from flask import Flask, request, jsonify, render_template
-import yaml
+import logging
 import os
-from plot.plot import plot_from_file
-from plot import calibrate
+from flask import Flask, render_template
+from flask_socketio import SocketIO
+from dotenv import load_dotenv
+from plot.vplotter import VPlotter
+import extensions
+from blueprints.plotter import (
+    plotter_bp,
+    start_background_threads as start_plotter_threads,
+)
+from blueprints.processor import (
+    processor_bp,
+    start_background_threads as start_processor_threads,
+)
+
+load_dotenv()
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+
+# Silence verbose PIL logs
+logging.getLogger("PIL").setLevel(logging.WARNING)
+
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "secret!")
 app.config["UPLOAD_FOLDER"] = "uploads"
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max file size
 
-# Create uploads folder if it doesn't exist
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
-# Placeholder functions
-def plot(parsed_data):
-    """Placeholder function for plotting"""
-    print(f"Plot called with data: {parsed_data}")
-    plot_from_file(parsed_data)
-    return {"status": "success", "message": "Plot function called", "data": parsed_data}
+app.register_blueprint(plotter_bp)
+app.register_blueprint(processor_bp)
 
-
-def left(speed):
-    """Placeholder function for left movement"""
-    print(f"Left called with speed: {speed}")
-    calibrate.steps_left(speed)
-    return {"status": "success", "action": "left", "speed": speed}
-
-
-def right(speed):
-    """Placeholder function for right movement"""
-    print(f"Right called with speed: {speed}")
-    calibrate.steps_right(speed)
-    return {"status": "success", "action": "right", "speed": speed}
-
-
-def servo(duty_cycle):
-    """Placeholder function for servo calibration"""
-    print(f"Servo called with duty cycle: {duty_cycle}")
-    calibrate.calibrate_servo(duty_cycle)
-    return {"status": "success", "action": "servo", "duty_cycle": duty_cycle}
 
 @app.route("/")
-def index():
-    return render_template("index.html")
-
-
-@app.route("/upload", methods=["POST"])
-def upload_file():
-    if "file" not in request.files:
-        return jsonify({"error": "No file part"}), 400
-
-    file = request.files["file"]
-
-    if file.filename == "":
-        return jsonify({"error": "No selected file"}), 400
-
-    if file and file.filename.endswith(".yaml"):
-        try:
-            content = file.read().decode("utf-8")
-            parsed_data = yaml.safe_load(content)
-            result = plot(parsed_data)
-            return jsonify(result), 200
-        except Exception as e:
-            return jsonify({"error": str(e)}), 400
-    else:
-        return jsonify({"error": "Only .yaml files allowed"}), 400
-
-
-@app.route("/control", methods=["POST"])
-def control():
-    data = request.json
-    direction = data.get("direction")
-    speed = data.get("speed", 1)
-
-    if direction in ["left_up", "left_down"]:
-        actual_speed = speed if direction == "left_up" else -speed
-        result = left(actual_speed)
-    elif direction in ["right_up", "right_down"]:
-        actual_speed = speed if direction == "right_up" else -speed
-        result = right(actual_speed)
-    elif direction == "servo":
-        result = servo(speed/10)
-    else:
-        return jsonify({"error": "Invalid direction"}), 400
-
-    return jsonify(result), 200
+def home():
+    return render_template("home.html")
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    try:
+        extensions.plotter_instance = VPlotter()
+        extensions.plotter_instance.__enter__()
+    except Exception as e:
+        logger.error(f"Could not initialize VPlotter: {e}")
+        extensions.plotter_instance = None
+
+    start_plotter_threads(socketio)
+    start_processor_threads(socketio)
+
+    logger.info("Starting Web Server...")
+    try:
+        socketio.run(app, debug=True, host="0.0.0.0", port=5000, use_reloader=False)
+    finally:
+        if extensions.plotter_instance:
+            extensions.plotter_instance.__exit__(None, None, None)
