@@ -73,7 +73,6 @@ input[type="range"] {
 
 .file-upload {
   position: relative;
-  overflow: hidden;
   margin-bottom: 10px;
 }
 

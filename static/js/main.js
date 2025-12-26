@@ -1,9 +1,10 @@
 const socket = io();
-let plotterState = { x: 0, y: 0, motor_distance: 0 };
+let plotterState = { x: 0, y: 0, motor_distance: 0, queue_size: 0, is_working: false };
 let canvasBounds = { top: 0, left: 0, right: 0, bottom: 0 };
 
 // Connect & Config
 socket.on('connect', () => console.log('Connected to MOLER'));
+
 socket.on('config', (bounds) => {
     canvasBounds = bounds;
     console.log('Bounds loaded:', bounds);
@@ -13,7 +14,18 @@ socket.on('config', (bounds) => {
 socket.on('status_update', (data) => {
     plotterState = data;
     updateVisuals(data);
+    updateUI(data);
 });
+
+function updateUI(data) {
+    const coords = document.getElementById('coords-info');
+    const queueInfo = document.getElementById('queue-info');
+    const statusText = data.is_working ? 'PLOTTING' : 'IDLE';
+    const statusColor = data.is_working ? 'orange' : 'limegreen';
+
+    coords.innerText = `X: ${data.x.toFixed(1)} Y: ${data.y.toFixed(1)}`;
+    queueInfo.innerHTML = `Status: <span style="color:${statusColor};font-weight:bold">${statusText}</span> | Queue: ${data.queue_size}`;
+}
 
 function updateVisuals(data) {
     const imgMsg = document.getElementById('plotter-feed');
@@ -31,7 +43,6 @@ function updateVisuals(data) {
     // Match canvas to image dimensions exactly
     canvas.width = imgMsg.clientWidth;
     canvas.height = imgMsg.clientHeight;
-
     const ctx = canvas.getContext('2d');
 
     // Scale: Physical Width (cm) -> Visual Width (px)
@@ -40,6 +51,7 @@ function updateVisuals(data) {
     const mx_left = 0;
     const my = 0;
     const mx_right = data.motor_distance * scale;
+
     const px = data.x * scale;
     const py = data.y * scale;
 
@@ -70,18 +82,17 @@ function updateVisuals(data) {
     ctx.fillStyle = data.z !== 0 ? 'blue' : 'red';
     ctx.arc(px, py, 6, 0, Math.PI * 2);
     ctx.fill();
-
-    // Update Info
-    document.getElementById('coords-info').innerText = `X: ${data.x.toFixed(1)} Y: ${data.y.toFixed(1)}`;
 }
 
 // Commands
 function sendManual(direction) {
+    if (plotterState.is_working) return;
     const speed = document.getElementById('speedSlider').value;
     socket.emit('move_manual', { direction, speed });
 }
 
 function goHome() {
+    if (plotterState.is_working) return;
     socket.emit('set_home');
 }
 
@@ -89,12 +100,18 @@ function clearCanvas() {
     socket.emit('clear_canvas');
 }
 
+function cancelJob() {
+    socket.emit('cancel_job');
+}
+
 // File Upload
 async function uploadFile() {
     const file = document.getElementById('fileInput').files[0];
     if (!file) return alert('Select a .yaml file');
+
     const formData = new FormData();
     formData.append('file', file);
+
     try {
         const res = await fetch('/upload', { method: 'POST', body: formData });
         const d = await res.json();
@@ -122,6 +139,9 @@ function initJoystick() {
     window.addEventListener('resize', calcBounds);
 
     const processCommandQueue = (data) => {
+        // If plotting is happening, disable joystick logic
+        if (plotterState.is_working) return;
+
         // If system is busy, store the LATEST command (overwrite old) and return
         if (isBusy) {
             pendingCommand = data;
@@ -144,11 +164,13 @@ function initJoystick() {
     const move = (cx, cy) => {
         let x = cx - bounds.left - center.x;
         let y = cy - bounds.top - center.y;
+
         const dist = Math.sqrt(x * x + y * y);
         if (dist > radius) {
             x = (x / dist) * radius;
             y = (y / dist) * radius;
         }
+
         handle.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
 
         processCommandQueue({
@@ -166,6 +188,7 @@ function initJoystick() {
         handle.addEventListener('mousedown', () => resizing = true);
         document.addEventListener('mouseup', end);
         document.addEventListener('mousemove', e => resizing && move(e.clientX, e.clientY));
+
         handle.addEventListener('touchstart', () => resizing = true);
         document.addEventListener('touchend', end);
         document.addEventListener('touchmove', e => {

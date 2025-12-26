@@ -114,20 +114,22 @@ class VPlotter:
     }
     SPEED_UP = 0.5
     SPEED_DOWN = 1.5
-    MOTOR_DISTANCE = 40
+    MOTOR_DISTANCE = 400  # mm
     SERVO_PIN = 10
     SERVO_FREQUENCY = 50
     PEN_UP_DUTY = 12
     PEN_DOWN_DUTY = 2
     STEPS_PER_REVOLUTION = 4096
-    SPOOL_CIRCUMFERENCE = 12.5
-    PIXELS_PER_CM = 10
-    MAX_CIRCLE_DIAMETER_CM = 0.5
+    SPOOL_CIRCUMFERENCE = 125  # mm
+    PIXELS_PER_MM = 1  # mm
+    MAX_CIRCLE_DIAMETER = 5  # mm
 
     def __init__(self):
         self.x = VPlotter.MOTOR_DISTANCE / 2
-        self.y = 12.5
-        self.z = 1
+        # mm
+        self.y = 125
+        self.w = 0
+
         self.servo_pwm = None
 
         s_left, s_right = self.calculate_string_lengths(self.x, self.y)
@@ -151,8 +153,8 @@ class VPlotter:
             self.STEPS_PER_REVOLUTION,
         )
 
-        self.canvas_width = int(VPlotter.MOTOR_DISTANCE * VPlotter.PIXELS_PER_CM)
-        self.canvas_height = int(40 * VPlotter.PIXELS_PER_CM)
+        self.canvas_width = int(VPlotter.MOTOR_DISTANCE * VPlotter.PIXELS_PER_MM)
+        self.canvas_height = int(VPlotter.MOTOR_DISTANCE * VPlotter.PIXELS_PER_MM)
         self.clear_canvas()
         logger.info("VPlotter Initialized")
 
@@ -234,48 +236,38 @@ class VPlotter:
         self.x = x
         self.y = y
 
-    def pen_up(self):
-        self.servo_pwm.ChangeDutyCycle(VPlotter.PEN_UP_DUTY)
-        self.z = 1
-        # time.sleep(0.3)
-        self.servo_pwm.ChangeDutyCycle(0)
-
-    def pen_down(self):
-        self.servo_pwm.ChangeDutyCycle(VPlotter.PEN_DOWN_DUTY)
-        self.z = 0
-        # time.sleep(0.3)
-        self.servo_pwm.ChangeDutyCycle(0)
-
     @staticmethod
     def interpolate(start, end, progression):
         return start + (end - start) * progression
 
-    def move_straight_line(self, target_x, target_y, target_z):
-        """Move to target position in a straight line with smooth z interpolation."""
+    def pen_up(self):
+        self.move_straight_line(w=0)
+
+    def pen_down(self):
+        self.move_straight_line(w=1)
+
+    def move_straight_line(self, x=None, y=None, w=None):
+        """Move to target position in a straight line with smooth interpolation."""
+
+        current_x, current_y = self.get_current_coords()
+
+        target_x = current_x if x is None else x
+        target_y = current_y if y is None else y
+        target_w = self.w if w is None else w
 
         start_left = self.left_motor.get_sting_length()
         start_right = self.right_motor.get_sting_length()
-        start_z = self.z
+        start_w = self.w
 
         # compute target string lengths
-        try:
-            target_left, target_right = self.calculate_string_lengths(
-                target_x, target_y
-            )
-        except ValueError as e:
-            logger.error(f"Move failed: {e}")
-            return
+        target_left, target_right = self.calculate_string_lengths(target_x, target_y)
 
         n_steps_left = self.left_motor.count_steps_to_target(target_left)
         n_steps_right = self.right_motor.count_steps_to_target(target_right)
 
-        max_steps = max(abs(n_steps_left), abs(n_steps_right))
+        max_steps = max(1, abs(n_steps_left), abs(n_steps_right))
 
-        # Avoid division by zero if already there
-        if max_steps == 0:
-            return
-
-        for i in range(max_steps):
+        for i in range(max_steps + 1):
             progress = i / max_steps
 
             # Update steppers, steppers will block / sleep when needed
@@ -287,18 +279,19 @@ class VPlotter:
             )
 
             # Update servo
-            z = self.interpolate(start_z, target_z, progress)
+            w = self.interpolate(start_w, target_w, progress)
             duty_cycle = self.interpolate(
-                VPlotter.PEN_DOWN_DUTY, VPlotter.PEN_UP_DUTY, z
+                VPlotter.PEN_UP_DUTY, VPlotter.PEN_DOWN_DUTY, w
             )
             self.servo_pwm.ChangeDutyCycle(duty_cycle)
+            self.w = w
 
             current_x, current_y = self.get_current_coords()
-            pixel_x = int(current_x * VPlotter.PIXELS_PER_CM)
-            pixel_y = int(current_y * VPlotter.PIXELS_PER_CM)
+            pixel_x = int(current_x * VPlotter.PIXELS_PER_MM)
+            pixel_y = int(current_y * VPlotter.PIXELS_PER_MM)
 
-            circle_diameter_cm = VPlotter.MAX_CIRCLE_DIAMETER_CM * (1 - z)
-            radius_pixels = int((circle_diameter_cm / 3) * VPlotter.PIXELS_PER_CM)
+            circle_diameter_cm = VPlotter.MAX_CIRCLE_DIAMETER * w
+            radius_pixels = int((circle_diameter_cm / 3) * VPlotter.PIXELS_PER_MM)
 
             if radius_pixels > 0:
                 cv2.circle(

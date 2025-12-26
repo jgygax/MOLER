@@ -3,22 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MOLER MKII</title>
+    <title>MOLER</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.js"></script>
 </head>
 <body>
-
 <div class="app-container">
     <div class="controls-panel">
         <h1><i class="fas fa-robot"></i> MOLER</h1>
+        
+        <div id="queue-info" style="background:#222; padding:10px; border-radius:5px; margin-bottom:15px; text-align:center;">
+            Status: IDLE | Queue: 0
+        </div>
+
         <h2>File</h2>
         <div class="file-upload">
             <input type="file" id="fileInput" accept=".yaml" style="color:#aaa;">
-            <button class="primary" onclick="uploadFile()" style="width:100%; margin-top:5px;">
-                <i class="fas fa-play"></i> Plot Path
-            </button>
+            <div style="display:flex; gap:5px; margin-top:5px;">
+                <button class="primary" onclick="uploadFile()" style="flex:2;">
+                    <i class="fas fa-plus"></i> Queue Job
+                </button>
+                <button class="danger" onclick="cancelJob()" style="flex:1; background:#c00;">
+                    <i class="fas fa-stop"></i> Stop
+                </button>
+            </div>
         </div>
 
         <h2>Calibration</h2>
@@ -28,6 +37,7 @@
             <button onclick="sendManual('left_down')"><i class="fas fa-arrow-down"></i> L</button>
             <button onclick="sendManual('right_down')">R <i class="fas fa-arrow-down"></i></button>
         </div>
+        
         <div style="margin-top:10px;">
             <label style="font-size:0.8rem; color:#888;">Speed</label>
             <input type="range" id="speedSlider" min="10" max="1000" value="100">
@@ -37,7 +47,7 @@
             <button onclick="sendManual('servo')" style="flex:1"><i class="fas fa-pencil-alt"></i> Pen</button>
             <button onclick="goHome()" style="flex:1" class="primary"><i class="fas fa-home"></i> Home</button>
         </div>
-        
+
         <div style="margin-top:10px;">
             <button onclick="clearCanvas()" style="width:100%"><i class="fas fa-eraser"></i> Clear Canvas</button>
         </div>
@@ -46,7 +56,7 @@
             <div id="joystick"><div id="joystick-handle"></div></div>
         </div>
     </div>
-
+    
     <div class="viz-panel">
         <div id="canvas-wrapper">
             <img id="plotter-feed" class="plotter-feed">
@@ -55,7 +65,6 @@
         <div class="status-bar" id="coords-info">Connecting...</div>
     </div>
 </div>
-
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>
