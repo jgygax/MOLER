@@ -1,13 +1,13 @@
 const socket = io();
-let plotterState = { x: 0, y: 0, motor_distance: 0, queue_size: 0, is_working: false };
+let plotterState = { x: 0, y: 0, motor_distance: 0, queue: [], current_job_id: null, is_working: false };
 let canvasBounds = { top: 0, left: 0, right: 0, bottom: 0 };
+let lastQueueState = ""; // Cache to prevent unnecessary DOM re-creation
 
 // Connect & Config
 socket.on('connect', () => console.log('Connected to MOLER'));
 
 socket.on('config', (bounds) => {
     canvasBounds = bounds;
-    console.log('Bounds loaded:', bounds);
 });
 
 // Status Stream
@@ -19,12 +19,49 @@ socket.on('status_update', (data) => {
 
 function updateUI(data) {
     const coords = document.getElementById('coords-info');
-    const queueInfo = document.getElementById('queue-info');
-    const statusText = data.is_working ? 'PLOTTING' : 'IDLE';
-    const statusColor = data.is_working ? 'orange' : 'limegreen';
+    if (coords) {
+        coords.innerText = `X: ${data.x.toFixed(1)} Y: ${data.y.toFixed(1)} | ${data.is_working ? 'BUSY' : 'IDLE'}`;
+    }
 
-    coords.innerText = `X: ${data.x.toFixed(1)} Y: ${data.y.toFixed(1)}`;
-    queueInfo.innerHTML = `Status: <span style="color:${statusColor};font-weight:bold">${statusText}</span> | Queue: ${data.queue_size}`;
+    // Create a signature of the current queue state
+    const currentQueueState = JSON.stringify({
+        queue: data.queue,
+        working: data.is_working,
+        curId: data.current_job_id
+    });
+
+    // Only re-render the queue HTML if the state has actually changed.
+    // This stops the buttons from being destroyed/recreated every 100ms, which was killing the click events.
+    if (currentQueueState === lastQueueState) return;
+    lastQueueState = currentQueueState;
+
+    const qList = document.getElementById('job-list-container');
+    if (!qList) return;
+
+    let html = '';
+    // Show current job if exists
+    if (data.is_working && data.current_job_id) {
+        html += `
+            <div class="job-item current">
+                <span><i class="fas fa-cog fa-spin"></i> Running</span>
+                <button class="danger btn-sm" onclick="cancelJob('${data.current_job_id}')"><i class="fas fa-times"></i></button>
+            </div>
+        `;
+    }
+
+    if (data.queue.length === 0 && !data.is_working) {
+        html = '<div style="padding:10px; color:#666; text-align:center">Queue Empty</div>';
+    } else {
+        data.queue.forEach(job => {
+            html += `
+                <div class="job-item">
+                    <span>${job.name}</span>
+                    <button class="danger btn-sm" onclick="cancelJob('${job.id}')"><i class="fas fa-times"></i></button>
+                </div>
+            `;
+        });
+    }
+    qList.innerHTML = html;
 }
 
 function updateVisuals(data) {
@@ -32,31 +69,18 @@ function updateVisuals(data) {
     const canvas = document.getElementById('overlay-canvas');
     if (!canvas || !imgMsg) return;
 
-    // Update camera feed
-    if (data.canvas) {
-        imgMsg.src = 'data:image/jpeg;base64,' + data.canvas;
-    }
-
-    // Ensure logic happens only when image has dimensions
+    if (data.canvas) imgMsg.src = 'data:image/jpeg;base64,' + data.canvas;
     if (imgMsg.clientWidth === 0) return;
 
-    // Match canvas to image dimensions exactly
     canvas.width = imgMsg.clientWidth;
     canvas.height = imgMsg.clientHeight;
     const ctx = canvas.getContext('2d');
-
-    // Scale: Physical Width (cm) -> Visual Width (px)
     const scale = canvas.width / data.motor_distance;
-
-    const mx_left = 0;
-    const my = 0;
-    const mx_right = data.motor_distance * scale;
 
     const px = data.x * scale;
     const py = data.y * scale;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
     // Draw Bounds
     const b_left = canvasBounds.left * scale;
     const b_top = canvasBounds.top * scale;
@@ -71,15 +95,13 @@ function updateVisuals(data) {
     ctx.strokeStyle = '#ff7300';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(mx_left, my);
-    ctx.lineTo(px, py);
-    ctx.moveTo(mx_right, my);
-    ctx.lineTo(px, py);
+    ctx.moveTo(0, 0); ctx.lineTo(px, py);
+    ctx.moveTo(data.motor_distance * scale, 0); ctx.lineTo(px, py);
     ctx.stroke();
 
     // Gondola
     ctx.beginPath();
-    ctx.fillStyle = data.z !== 0 ? 'blue' : 'red';
+    ctx.fillStyle = 'red';
     ctx.arc(px, py, 6, 0, Math.PI * 2);
     ctx.fill();
 }
@@ -97,24 +119,20 @@ function goHome() {
 }
 
 function clearCanvas() {
-    socket.emit('clear_canvas');
+    confirm("Clear the drawing?") && socket.emit('clear_canvas');
 }
 
-function cancelJob() {
-    socket.emit('cancel_job');
+function cancelJob(jobId) {
+    socket.emit('cancel_job', { id: jobId });
 }
 
-// File Upload
 async function uploadFile() {
     const file = document.getElementById('fileInput').files[0];
     if (!file) return alert('Select a .yaml file');
-
     const formData = new FormData();
     formData.append('file', file);
-
     try {
-        const res = await fetch('/upload', { method: 'POST', body: formData });
-        const d = await res.json();
+        await fetch('/upload', { method: 'POST', body: formData });
     } catch (e) { alert(e); }
 }
 
@@ -122,12 +140,8 @@ async function uploadFile() {
 function initJoystick() {
     const box = document.getElementById('joystick');
     const handle = document.getElementById('joystick-handle');
-    let resizing = false;
-    let bounds, center, radius;
-
-    // Queue Logic variables
-    let isBusy = false;
-    let pendingCommand = null;
+    let resizing = false, bounds, center, radius;
+    let isBusy = false, pendingCommand = null;
 
     const calcBounds = () => {
         if (!box) return;
@@ -139,20 +153,11 @@ function initJoystick() {
     window.addEventListener('resize', calcBounds);
 
     const processCommandQueue = (data) => {
-        // If plotting is happening, disable joystick logic
         if (plotterState.is_working) return;
-
-        // If system is busy, store the LATEST command (overwrite old) and return
-        if (isBusy) {
-            pendingCommand = data;
-            return;
-        }
-
+        if (isBusy) { pendingCommand = data; return; }
         isBusy = true;
-        socket.emit('move_joystick', data, (ack) => {
-            // ACK received from server
+        socket.emit('move_joystick', data, () => {
             isBusy = false;
-            // If a new command arrived while we were busy, send it now
             if (pendingCommand) {
                 const next = pendingCommand;
                 pendingCommand = null;
@@ -164,19 +169,10 @@ function initJoystick() {
     const move = (cx, cy) => {
         let x = cx - bounds.left - center.x;
         let y = cy - bounds.top - center.y;
-
         const dist = Math.sqrt(x * x + y * y);
-        if (dist > radius) {
-            x = (x / dist) * radius;
-            y = (y / dist) * radius;
-        }
-
+        if (dist > radius) { x = (x / dist) * radius; y = (y / dist) * radius; }
         handle.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-
-        processCommandQueue({
-            x: (x / radius) * 0.5,
-            y: (y / radius) * 0.5
-        });
+        processCommandQueue({ x: (x / radius) * 0.5, y: (y / radius) * 0.5 });
     };
 
     const end = () => {
@@ -185,18 +181,23 @@ function initJoystick() {
     };
 
     if (handle) {
+        // Mouse
         handle.addEventListener('mousedown', () => resizing = true);
         document.addEventListener('mouseup', end);
         document.addEventListener('mousemove', e => resizing && move(e.clientX, e.clientY));
 
-        handle.addEventListener('touchstart', () => resizing = true);
+        // Touch
+        handle.addEventListener('touchstart', (e) => {
+            resizing = true;
+            e.preventDefault(); // Stop scroll
+        });
         document.addEventListener('touchend', end);
         document.addEventListener('touchmove', e => {
             if (resizing) {
-                e.preventDefault();
+                e.preventDefault(); // Stop scroll
                 move(e.touches[0].clientX, e.touches[0].clientY);
             }
-        });
+        }, { passive: false });
     }
 }
 

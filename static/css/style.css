@@ -1,152 +1,173 @@
 :root {
-  --bg-color: #1a1a1a;
-  --card-bg: #2d2d2d;
-  --text-main: #e0e0e0;
-  --accent: #ff7300;
-  --accent-hover: #e66000;
+    --bg-color: #1a1a1a;
+    --card-bg: #2d2d2d;
+    --text-main: #e0e0e0;
+    --accent: #ff7300;
+    --accent-hover: #e66000;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background: var(--bg-color);
-  color: var(--text-main);
-  height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg-color);
+    color: var(--text-main);
+    min-height: 100vh; /* Changed from height to min-height for scrolling if needed */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 10px;
 }
 
 .app-container {
-  background: var(--card-bg);
-  width: 100%;
-  max-width: 900px;
-  height: 90vh;
-  border-radius: 12px;
-  display: grid;
-  grid-template-columns: 300px 1fr;
-  overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    background: var(--card-bg);
+    width: 100%;
+    max-width: 1000px;
+    height: 90vh; /* Desktop fixed height */
+    border-radius: 12px;
+    display: flex; /* Changed to flex for responsive order */
+    flex-direction: row-reverse; /* Canvas (right) comes first visually on desktop */
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
 }
 
 /* Sidebar Controls */
 .controls-panel {
-  padding: 20px;
-  background: #252525;
-  border-right: 1px solid #3d3d3d;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  overflow-y: auto;
-}
-
-h1 { font-size: 1.2rem; color: var(--accent); margin-bottom: 10px; }
-h2 { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 10px; }
-
-.btn-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-button {
-  background: #3d3d3d;
-  color: var(--text-main);
-  border: none;
-  padding: 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 1rem;
-}
-
-button:hover { background: var(--accent); color: white; }
-button:active { transform: translateY(1px); }
-button.primary { background: var(--accent); color: white; }
-button.primary:hover { background: var(--accent-hover); }
-
-input[type="range"] {
-  width: 100%;
-  accent-color: var(--accent);
-}
-
-.file-upload {
-  position: relative;
-  margin-bottom: 10px;
+    flex: 0 0 350px; /* Fixed width sidebar */
+    padding: 20px;
+    background: #252525;
+    border-left: 1px solid #3d3d3d; /* Changed border side */
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    overflow-y: auto;
 }
 
 /* Visualization Area */
 .viz-panel {
-  position: relative;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start; /* Changed from center to allow top alignment */
-  overflow: hidden;
+    flex: 1; /* Takes remaining space */
+    position: relative;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    overflow: hidden;
+    background: #1a1a1a;
 }
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    .app-container {
+        flex-direction: column; /* Stack top-to-bottom */
+        height: auto; /* Let it grow */
+        min-height: 100vh;
+        border-radius: 0;
+    }
+    
+    .viz-panel {
+        flex: 0 0 auto; /* Natural height */
+        min-height: 300px;
+        border-bottom: 1px solid #3d3d3d;
+    }
+
+    .controls-panel {
+        flex: 1;
+        border-left: none;
+        overflow-y: visible; /* Scroll with body */
+    }
+}
+
+h1 { font-size: 1.2rem; color: var(--accent); }
+h2 { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-top: 10px; }
+
+.btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+button {
+    background: #3d3d3d;
+    color: var(--text-main);
+    border: none;
+    padding: 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+button:hover { background: var(--accent); color: white; }
+button.primary { background: var(--accent); color: white; }
+button.danger { background: #c0392b; color: white; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+/* Job List Styling */
+.job-list {
+    background: #1e1e1e;
+    border-radius: 6px;
+    max-height: 150px;
+    overflow-y: auto;
+    padding: 5px;
+}
+.job-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    border-bottom: 1px solid #333;
+    font-size: 0.9rem;
+}
+.job-item.current { color: var(--accent); font-weight: bold; border-left: 3px solid var(--accent); }
+.job-item:last-child { border-bottom: none; }
+.btn-sm { padding: 4px 8px; font-size: 0.8rem; margin-left: 10px; }
 
 #canvas-wrapper {
-  position: relative;
-  width: 100%;
-  /* Removed height: 100% to let content define aspect ratio */
-  background: #fff;
-  border-radius: 4px;
-  overflow: hidden;
-  line-height: 0; /* Prevents ghost spacing */
-}
-
-/* Canvas and Image stacking */
-canvas, img.plotter-feed {
-  position: absolute;
-  top: 0; left: 0;
-  /* Changed from object-fit: contain to exact wrapping for alignment */
-  width: 100%;
-  height: 100%; 
-  object-fit: fill; 
-}
-
-/* Base image controls the wrapper size (via JS/relative) */
-img.plotter-feed {
     position: relative;
     width: 100%;
-    height: auto;
-    object-fit: unset;
+    background: #fff;
+    border-radius: 4px;
+    overflow: hidden;
+    line-height: 0;
 }
 
+canvas, img.plotter-feed {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%; object-fit: fill;
+}
+img.plotter-feed { position: relative; width: 100%; height: auto; object-fit: unset; }
+
 .joystick-area {
-  margin-top: auto;
-  display: flex;
-  justify-content: center;
-  padding: 10px 0;
+    margin-top: auto;
+    display: flex;
+    justify-content: center;
+    padding: 10px 0;
 }
 
 #joystick {
-  width: 120px; height: 120px;
-  background: #1a1a1a;
-  border-radius: 50%;
-  position: relative;
-  border: 2px solid #3d3d3d;
+    width: 120px; height: 120px;
+    background: #1a1a1a;
+    border-radius: 50%;
+    position: relative;
+    border: 2px solid #3d3d3d;
+    touch-action: none; /* Prevents scrolling on move */
 }
 
 #joystick-handle {
-  width: 40px; height: 40px;
-  background: var(--accent);
-  border-radius: 50%;
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  cursor: grab;
+    width: 40px; height: 40px;
+    background: var(--accent);
+    border-radius: 50%;
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    cursor: grab;
+    touch-action: none;
 }
 
 .status-bar {
-  position: absolute;
-  bottom: 20px; right: 20px;
-  background: rgba(0,0,0,0.7);
-  padding: 5px 10px;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  font-family: monospace;
-  pointer-events: none;
+    position: absolute; bottom: 10px; right: 10px;
+    background: rgba(0,0,0,0.7);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-family: monospace;
+    pointer-events: none;
 }

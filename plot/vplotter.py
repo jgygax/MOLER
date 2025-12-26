@@ -66,7 +66,7 @@ class StepperMotor:
         else:
             speed = self.speed_down
 
-        update_interval = speed / self.steps_per_revolution
+        update_interval = 1 / (self.steps_per_revolution * speed)
 
         for _ in range(count):
             current_time = time.time()
@@ -90,7 +90,7 @@ class StepperMotor:
         )
 
     def move_to_target(self, target_string_length):
-        current_string_length = self.get_sting_length()
+        current_string_length = self.get_string_length()
         if target_string_length < current_string_length:
             direction = -self.up_direction
         else:
@@ -103,7 +103,7 @@ class StepperMotor:
     def get_revolutions(self, string_length):
         return string_length / self.spool_circumference
 
-    def get_sting_length(self):
+    def get_string_length(self):
         return self.revolutions * self.spool_circumference
 
 
@@ -112,8 +112,8 @@ class VPlotter:
         0: [23, 24, 25, 8],  # Left motor pins
         1: [5, 6, 13, 26],  # Right motor pins
     }
-    SPEED_UP = 0.5
-    SPEED_DOWN = 1.5
+    SPEED_UP = 0.3
+    SPEED_DOWN = 0.1
     MOTOR_DISTANCE = 400  # mm
     SERVO_PIN = 10
     SERVO_FREQUENCY = 50
@@ -123,6 +123,9 @@ class VPlotter:
     SPOOL_CIRCUMFERENCE = 125  # mm
     PIXELS_PER_MM = 1  # mm
     MAX_CIRCLE_DIAMETER = 5  # mm
+
+    DOCK_POSITION = MOTOR_DISTANCE / 2, 125
+    START_POSITION = MOTOR_DISTANCE / 2, 200
 
     def __init__(self):
         self.x = VPlotter.MOTOR_DISTANCE / 2
@@ -196,8 +199,8 @@ class VPlotter:
         s_right = ((cls.MOTOR_DISTANCE - x) ** 2 + y**2) ** 0.5
 
         if s_left < 0 or s_right < 0:
-            logger.error("Calculation Error: strings must be longer than 0 cm")
-            raise ValueError("strings must be longer than 0 cm")
+            logger.error("Calculation Error: strings must be longer than 0 mm")
+            raise ValueError("strings must be longer than 0 mm")
 
         return s_left, s_right
 
@@ -224,7 +227,7 @@ class VPlotter:
 
     def get_current_coords(self):
         return self.calculate_coords(
-            self.left_motor.get_sting_length(), self.right_motor.get_sting_length()
+            self.left_motor.get_string_length(), self.right_motor.get_string_length()
         )
 
     def set_current_position(self, x, y):
@@ -249,37 +252,34 @@ class VPlotter:
     def move_straight_line(self, x=None, y=None, w=None):
         """Move to target position in a straight line with smooth interpolation."""
 
-        current_x, current_y = self.get_current_coords()
+        start_x, start_y = self.get_current_coords()
 
-        target_x = current_x if x is None else x
-        target_y = current_y if y is None else y
+        target_x = start_x if x is None else x
+        target_y = start_y if y is None else y
         target_w = self.w if w is None else w
 
-        start_left = self.left_motor.get_sting_length()
-        start_right = self.right_motor.get_sting_length()
         start_w = self.w
 
         # compute target string lengths
         target_left, target_right = self.calculate_string_lengths(target_x, target_y)
-
         n_steps_left = self.left_motor.count_steps_to_target(target_left)
         n_steps_right = self.right_motor.count_steps_to_target(target_right)
-
         max_steps = max(1, abs(n_steps_left), abs(n_steps_right))
 
-        for i in range(max_steps + 1):
-            progress = i / max_steps
+        for i in range(max_steps):
+            progress = (i + 1) / max_steps
+
+            x = self.interpolate(start_x, target_x, progress)
+            y = self.interpolate(start_y, target_y, progress)
+            w = self.interpolate(start_w, target_w, progress)
+
+            left, right = self.calculate_string_lengths(x, y)
 
             # Update steppers, steppers will block / sleep when needed
-            self.left_motor.move_to_target(
-                self.interpolate(start_left, target_left, progress)
-            )
-            self.right_motor.move_to_target(
-                self.interpolate(start_right, target_right, progress)
-            )
+            self.left_motor.move_to_target(left)
+            self.right_motor.move_to_target(right)
 
             # Update servo
-            w = self.interpolate(start_w, target_w, progress)
             duty_cycle = self.interpolate(
                 VPlotter.PEN_UP_DUTY, VPlotter.PEN_DOWN_DUTY, w
             )
@@ -290,8 +290,8 @@ class VPlotter:
             pixel_x = int(current_x * VPlotter.PIXELS_PER_MM)
             pixel_y = int(current_y * VPlotter.PIXELS_PER_MM)
 
-            circle_diameter_cm = VPlotter.MAX_CIRCLE_DIAMETER * w
-            radius_pixels = int((circle_diameter_cm / 3) * VPlotter.PIXELS_PER_MM)
+            circle_diameter_mm = VPlotter.MAX_CIRCLE_DIAMETER * w
+            radius_pixels = int((circle_diameter_mm / 3) * VPlotter.PIXELS_PER_MM)
 
             if radius_pixels > 0:
                 cv2.circle(
