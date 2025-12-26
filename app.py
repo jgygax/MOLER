@@ -20,9 +20,10 @@ app.plotter = None
 
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
+
 def plot(parsed_data):
     print(f"Starting plot thread with data")
-    thread = threading.Thread(target=plot_from_file, args=(parsed_data, app.plotter))
+    thread = threading.Thread(target=plot_from_file, args=(app.plotter, parsed_data))
     thread.start()
     return {
         "status": "success",
@@ -96,15 +97,55 @@ def control():
     return jsonify(result), 200
 
 
+@app.route("/move", methods=["POST"])
+def move():
+    data = request.json
+    delta_x = data.get("x", 0)
+    delta_y = data.get("y", 0)
+
+    if app.plotter is None:
+        return jsonify({"error": "Plotter not initialized"}), 500
+
+    current_x, current_y = app.plotter.get_current_coords()
+    new_x = current_x + delta_x
+    new_y = current_y + delta_y
+
+    app.plotter.move_straight_line(new_x, new_y, app.plotter.z)
+
+    return jsonify({"status": "success", "x": new_x, "y": new_y}), 200
+
+
+@app.route("/home", methods=["POST"])
+def set_home():
+    if app.plotter is None:
+        return jsonify({"error": "Plotter not initialized"}), 500
+
+    try:
+        home_x = app.plotter.MOTOR_DISTANCE / 2
+        home_y = 12.5
+
+        app.plotter.set_current_position(home_x, home_y)
+
+        return jsonify({"status": "success", "x": home_x, "y": home_y}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
 @app.route("/status")
 def status():
     plotter = app.plotter
 
     if plotter is None:
-        return jsonify({"active": False, "x": 0, "y": 0, "z": 1})
+        return jsonify({"active": False, "x": 0, "y": 0, "z": 1, "motor_distance": 40})
 
     plotter_x, plotter_y = plotter.get_current_coords()
-    state = {"active": True, "x": plotter_x, "y": plotter_y, "z": plotter.z}
+    state = {
+        "active": True,
+        "x": plotter_x,
+        "y": plotter_y,
+        "z": plotter.z,
+        "motor_distance": plotter.MOTOR_DISTANCE,
+    }
 
     if hasattr(plotter, "canvas") and plotter.canvas is not None:
         try:
