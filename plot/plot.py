@@ -8,7 +8,7 @@ def plot_pattern():
         r = 15
         cx = 17
         cy = 23
-        plotter = VPlotter()
+        plotter = VPlotter.get_instance()
 
         # plot_square(plotter, r, cx, cy)
         # plotter.move_straight_line(cx, cy)
@@ -29,7 +29,7 @@ def plot_from_file(
     pos_scale=10,
 ):
     try:
-        plotter = VPlotter()
+        plotter = VPlotter.get_instance()
         plotter.move_straight_line(20, 20, 1)
         print("--->", plotter.x, plotter.y)
 

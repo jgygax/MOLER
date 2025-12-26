@@ -9,19 +9,20 @@ import cv2
 import base64
 import numpy as np
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "uploads"
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max file size
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+app.plotter = None
 
-# Create uploads folder if it doesn't exist
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
-
-# Placeholder functions
 def plot(parsed_data):
-    """Start plotting in a background thread"""
     print(f"Starting plot thread with data")
-    thread = threading.Thread(target=plot_from_file, args=(parsed_data,))
+    thread = threading.Thread(target=plot_from_file, args=(parsed_data, app.plotter))
     thread.start()
     return {
         "status": "success",
@@ -31,23 +32,20 @@ def plot(parsed_data):
 
 
 def left(speed):
-    """Placeholder function for left movement"""
     print(f"Left called with speed: {speed}")
-    calibrate.steps_left(speed)
+    calibrate.steps_left(speed, app.plotter)
     return {"status": "success", "action": "left", "speed": speed}
 
 
 def right(speed):
-    """Placeholder function for right movement"""
     print(f"Right called with speed: {speed}")
-    calibrate.steps_right(speed)
+    calibrate.steps_right(speed, app.plotter)
     return {"status": "success", "action": "right", "speed": speed}
 
 
 def servo(duty_cycle):
-    """Placeholder function for servo calibration"""
     print(f"Servo called with duty cycle: {duty_cycle}")
-    calibrate.calibrate_servo(duty_cycle)
+    calibrate.calibrate_servo(duty_cycle, app.plotter)
     return {"status": "success", "action": "servo", "duty_cycle": duty_cycle}
 
 
@@ -100,20 +98,16 @@ def control():
 
 @app.route("/status")
 def status():
-    plotter = VPlotter.CURRENT_INSTANCE
+    plotter = app.plotter
 
     if plotter is None:
         return jsonify({"active": False, "x": 0, "y": 0, "z": 1})
 
-    # Get current state
     plotter_x, plotter_y = plotter.get_current_coords()
     state = {"active": True, "x": plotter_x, "y": plotter_y, "z": plotter.z}
 
-    # Encode canvas if it exists
     if hasattr(plotter, "canvas") and plotter.canvas is not None:
         try:
-            # Resize for faster transfer if needed, but 400x300 isn't huge
-            # Encode as JPEG
             retval, buffer = cv2.imencode(".jpg", plotter.canvas)
             if retval:
                 jpg_as_text = base64.b64encode(buffer).decode("utf-8")
@@ -125,4 +119,6 @@ def status():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    with VPlotter() as plotter:
+        app.plotter = plotter
+        app.run(debug=True, host="0.0.0.0", port=5000, use_reloader=False)

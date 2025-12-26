@@ -2,31 +2,25 @@ from plot.vplotter import VPlotter
 import time
 
 
-def steps_left(speed):
-    try:
-        plotter = VPlotter()
-        plotter.move_single_motor(0, -speed)
+def steps_left(speed, plotter):
+    if speed < 0:
+        direction = plotter.left_motor.up_direction
+    else:
+        direction = -plotter.left_motor.up_direction
 
-    except KeyboardInterrupt:
-        print("\nStopping plotter...")
-    finally:
-        plotter.cleanup()
-        print("Plotting finished, GPIO cleaned up")
+    plotter.left_motor.step(count=abs(speed), direction=direction)
 
 
-def steps_right(speed):
-    try:
-        plotter = VPlotter()
-        plotter.move_single_motor(1, speed)
+def steps_right(speed, plotter):
+    if speed < 0:
+        direction = plotter.right_motor.up_direction
+    else:
+        direction = -plotter.right_motor.up_direction
 
-    except KeyboardInterrupt:
-        print("\nStopping plotter...")
-    finally:
-        plotter.cleanup()
-        print("Plotting finished, GPIO cleaned up")
+    plotter.right_motor.step(count=abs(speed), direction=direction)
 
 
-def calibrate_servo(duty_cycle):
+def calibrate_servo(duty_cycle, plotter):
     """Test a specific duty cycle value for servo calibration.
 
     Usage:
@@ -35,15 +29,7 @@ def calibrate_servo(duty_cycle):
         plotter.calibrate_servo(10.0)  # Test 180° position
     """
 
-    try:
-        plotter = VPlotter()
-        print(f"Setting servo to duty cycle: {duty_cycle}%")
-        plotter.servo_pwm.ChangeDutyCycle(duty_cycle)
-        time.sleep(5)  # Allow time to observe position
-        plotter.servo_pwm.ChangeDutyCycle(0)  # Stop signal
-
-    except KeyboardInterrupt:
-        print("\nStopping plotter...")
-    finally:
-        plotter.cleanup()
-        print("Plotting finished, GPIO cleaned up")
+    print(f"Setting servo to duty cycle: {duty_cycle}%")
+    plotter.servo_pwm.ChangeDutyCycle(duty_cycle)
+    time.sleep(5)  # Allow time to observe position
+    plotter.servo_pwm.ChangeDutyCycle(0)  # Stop signal

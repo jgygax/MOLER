@@ -2,3 +2,4 @@ playground
 __pycache__
 plot_patterns
 .venv
+.env
