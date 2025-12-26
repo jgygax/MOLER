@@ -57,6 +57,5 @@ def plot_pattern(plotter, pattern, stop_event=None):
                 break
             x, y, w = point["x"], point["y"], point["w"]
             plotter.move_straight_line(x, y, w)
-            logger.debug((x, y, w, plotter.get_current_coords()))
 
         plotter.pen_up()

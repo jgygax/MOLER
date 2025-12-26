@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="menu-container">
+    <a href="{{ url_for('plotter.index') }}" class="menu-card">
+        <i class="fas fa-draw-polygon"></i>
+        <span>Live Plotter Control</span>
+    </a>
+    <a href="{{ url_for('processor.index') }}" class="menu-card">
+        <i class="fas fa-magic"></i>
+        <span>AI Picture Processing</span>
+    </a>
+</div>
+{% endblock %}

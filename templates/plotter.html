@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="app-container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="panel job-panel">
+            <h2>Job Queue</h2>
+            <div class="file-upload">
+                <input type="file" id="fileInput" accept=".yaml">
+                <button class="primary" onclick="uploadFile()"><i class="fas fa-plus"></i></button>
+            </div>
+            <div id="job-list-container" class="job-list"></div>
+        </div>
+
+        <div class="panel manual-panel">
+            <h2>Control</h2>
+            <div class="control-grid">
+                <button class="speed-btn" id="btn-slow" onclick="setSpeed('slow')"><i
+                        class="fas fa-walking"></i></button>
+                <button onclick="moveXY(-1, -1)"><i class="fas fa-arrow-up"
+                        style="transform: rotate(-45deg)"></i></button>
+                <button onclick="moveXY(0, -1)"><i class="fas fa-arrow-up"></i></button>
+                <button onclick="moveXY(1, -1)"><i class="fas fa-arrow-up"
+                        style="transform: rotate(45deg)"></i></button>
+                <button class="speed-btn active" id="btn-medium" onclick="setSpeed('medium')"><i
+                        class="fas fa-bicycle"></i></button>
+                <button onclick="moveXY(-1, 0)"><i class="fas fa-arrow-left"></i></button>
+                <button onclick="resetHome()" class="home-btn"><i class="fas fa-crosshairs"></i></button>
+                <button onclick="moveXY(1, 0)"><i class="fas fa-arrow-right"></i></button>
+                <button class="speed-btn" id="btn-fast" onclick="setSpeed('fast')"><i class="fas fa-train"></i></button>
+                <button onclick="moveXY(-1, 1)"><i class="fas fa-arrow-down"
+                        style="transform: rotate(45deg)"></i></button>
+                <button onclick="moveXY(0, 1)"><i class="fas fa-arrow-down"></i></button>
+                <button onclick="moveXY(1, 1)"><i class="fas fa-arrow-down"
+                        style="transform: rotate(-45deg)"></i></button>
+            </div>
+            <div class="fine-control">
+                <div class="comp-grp"><span>L</span><button onclick="adjustMotor('left', 1)">▲</button><button
+                        onclick="adjustMotor('left', -1)">▼</button></div>
+                <div class="comp-grp"><span>W</span><button onclick="adjustServo(1)">+</button><button
+                        onclick="adjustServo(-1)">-</button></div>
+                <div class="comp-grp"><span>R</span><button onclick="adjustMotor('right', 1)">▲</button><button
+                        onclick="adjustMotor('right', -1)">▼</button></div>
+            </div>
+            <button onclick="clearCanvas()" class="danger action-btn"><i class="fas fa-eraser"></i> Clear</button>
+        </div>
+    </div>
+
+    <!-- Viz -->
+    <div class="panel viz-panel">
+        <div id="canvas-wrapper">
+            <img id="plotter-feed" class="plotter-feed">
+            <canvas id="overlay-canvas"></canvas>
+        </div>
+        <div class="status-bar" id="coords-info">Connecting...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/plotter.js') }}"></script>
+{% endblock %}

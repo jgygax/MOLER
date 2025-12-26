@@ -3,3 +3,5 @@ __pycache__
 plot_patterns
 .venv
 .env
+uploads
+job_history.json

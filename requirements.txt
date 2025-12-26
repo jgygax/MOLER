@@ -5,3 +5,5 @@ opencv-python
 numpy
 flask-socketio
 eventlet
+requests
+Pillow

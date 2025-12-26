@@ -112,8 +112,8 @@ class VPlotter:
         0: [23, 24, 25, 8],  # Left motor pins
         1: [5, 6, 13, 26],  # Right motor pins
     }
-    SPEED_UP = 0.3
-    SPEED_DOWN = 0.1
+    SPEED_UP = 0.6
+    SPEED_DOWN = 0.3
     MOTOR_DISTANCE = 400  # mm
     SERVO_PIN = 10
     SERVO_FREQUENCY = 50
@@ -122,7 +122,7 @@ class VPlotter:
     STEPS_PER_REVOLUTION = 4096
     SPOOL_CIRCUMFERENCE = 125  # mm
     PIXELS_PER_MM = 1  # mm
-    MAX_CIRCLE_DIAMETER = 3  # mm
+    MAX_CIRCLE_DIAMETER = 1  # mm
 
     DOCK_POSITION = MOTOR_DISTANCE / 2, 125
     START_POSITION = MOTOR_DISTANCE / 2, 200
