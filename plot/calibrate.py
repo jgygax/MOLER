@@ -8,7 +8,9 @@ def steps_left(speed, plotter):
     else:
         direction = -plotter.left_motor.up_direction
 
-    plotter.left_motor.step(count=abs(speed), direction=direction)
+    for _ in range(abs(speed)):
+        plotter.left_motor.step(direction=direction)
+        plotter.update_canvas()
 
 
 def steps_right(speed, plotter):
@@ -17,7 +19,9 @@ def steps_right(speed, plotter):
     else:
         direction = -plotter.right_motor.up_direction
 
-    plotter.right_motor.step(count=abs(speed), direction=direction)
+    for _ in range(abs(speed)):
+        plotter.right_motor.step(direction=direction)
+        plotter.update_canvas()
 
 
 def calibrate_servo(duty_cycle, plotter):

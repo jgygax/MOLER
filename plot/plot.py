@@ -4,6 +4,35 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def execute_move_sequence(plotter, target, stop_event=None):
+    if stop_event and stop_event.is_set():
+        return
+
+    # Always pen up first
+    plotter.pen_up()
+
+    # Get coordinate definitions
+    start_x, start_y = plotter.START_POSITION
+    dock_x, dock_y = plotter.DOCK_POSITION
+
+    if target == "start":
+        # Just move to start (after pen up)
+        if stop_event and stop_event.is_set():
+            return
+        plotter.move_straight_line(start_x, start_y, 0)
+
+    elif target == "dock":
+        # Move to start first
+        if stop_event and stop_event.is_set():
+            return
+        plotter.move_straight_line(start_x, start_y, 0)
+
+        # Then move to dock
+        if stop_event and stop_event.is_set():
+            return
+        plotter.move_straight_line(dock_x, dock_y, 0)
+
+
 def plot_pattern(plotter, pattern, stop_event=None):
     if stop_event and stop_event.is_set():
         return

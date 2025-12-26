@@ -1,7 +1,15 @@
 const socket = io();
-let plotterState = { x: 0, y: 0, motor_distance: 0, queue: [], current_job_id: null, is_working: false };
+let plotterState = { x: 0, y: 0, motor_distance: 0, queue: [], current_job_id: null, current_job_name: null, is_working: false };
 let canvasBounds = { top: 0, left: 0, right: 0, bottom: 0 };
-let lastQueueState = ""; // Cache to prevent unnecessary DOM re-creation
+let lastQueueState = "";
+
+// Speed Configurations
+const SPEEDS = {
+    slow: { steps: 50, servo: 0.05, dist: 3, label: 'Slow' },
+    medium: { steps: 300, servo: 0.10, dist: 30, label: 'Med' },
+    fast: { steps: 1000, servo: 0.50, dist: 100, label: 'Fast' }
+};
+let currentSpeed = 'medium';
 
 // Connect & Config
 socket.on('connect', () => console.log('Connected to MOLER'));
@@ -20,18 +28,16 @@ socket.on('status_update', (data) => {
 function updateUI(data) {
     const coords = document.getElementById('coords-info');
     if (coords) {
-        coords.innerText = `X: ${data.x.toFixed(1)} Y: ${data.y.toFixed(1)} | ${data.is_working ? 'BUSY' : 'IDLE'}`;
+        coords.innerText = `X: ${data.x.toFixed(1)} Y: ${data.y.toFixed(1)} W: ${data.w.toFixed(2)} | ${data.is_working ? 'BUSY' : 'IDLE'}`;
     }
 
-    // Create a signature of the current queue state
     const currentQueueState = JSON.stringify({
         queue: data.queue,
         working: data.is_working,
-        curId: data.current_job_id
+        curId: data.current_job_id,
+        curName: data.current_job_name
     });
 
-    // Only re-render the queue HTML if the state has actually changed.
-    // This stops the buttons from being destroyed/recreated every 100ms, which was killing the click events.
     if (currentQueueState === lastQueueState) return;
     lastQueueState = currentQueueState;
 
@@ -39,11 +45,12 @@ function updateUI(data) {
     if (!qList) return;
 
     let html = '';
-    // Show current job if exists
     if (data.is_working && data.current_job_id) {
+        // Show current job name
+        const display = data.current_job_name || 'Processing...';
         html += `
             <div class="job-item current">
-                <span><i class="fas fa-cog fa-spin"></i> Running</span>
+                <span><i class="fas fa-cog fa-spin"></i> ${display}</span>
                 <button class="danger btn-sm" onclick="cancelJob('${data.current_job_id}')"><i class="fas fa-times"></i></button>
             </div>
         `;
@@ -81,6 +88,7 @@ function updateVisuals(data) {
     const py = data.y * scale;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
     // Draw Bounds
     const b_left = canvasBounds.left * scale;
     const b_top = canvasBounds.top * scale;
@@ -99,27 +107,63 @@ function updateVisuals(data) {
     ctx.moveTo(data.motor_distance * scale, 0); ctx.lineTo(px, py);
     ctx.stroke();
 
-    // Gondola
+    // Draw Gondola
     ctx.beginPath();
-    ctx.fillStyle = 'red';
-    ctx.arc(px, py, 6, 0, Math.PI * 2);
-    ctx.fill();
+
+    // Logic: Red cross if closed (w ~ 0), variable dot if open
+    if (data.w <= 0.05) {
+        const s = 10; // size of cross
+        ctx.strokeStyle = 'red';
+        ctx.lineWidth = 3;
+        ctx.moveTo(px - s, py - s); ctx.lineTo(px + s, py + s);
+        ctx.moveTo(px + s, py - s); ctx.lineTo(px - s, py + s);
+        ctx.stroke();
+    } else {
+        ctx.fillStyle = 'red';
+        // Base size 4px, growing up to 20px based on w (0-1)
+        const radius = 3 + (data.w * 6);
+        ctx.arc(px, py, radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
 }
 
-// Commands
-function sendManual(direction) {
-    if (plotterState.is_working) return;
-    const speed = document.getElementById('speedSlider').value;
-    socket.emit('move_manual', { direction, speed });
+// --- Interaction Logic ---
+
+function setSpeed(level) {
+    currentSpeed = level;
+    document.querySelectorAll('.speed-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(`btn-${level}`).classList.add('active');
 }
 
-function goHome() {
-    if (plotterState.is_working) return;
+function moveXY(dx_mult, dy_mult) {
+    const dist = SPEEDS[currentSpeed].dist;
+    socket.emit('move_xy', {
+        x: dx_mult * dist,
+        y: dy_mult * dist
+    });
+}
+
+function adjustMotor(motor, direction) {
+    const steps = SPEEDS[currentSpeed].steps;
+    socket.emit('move_raw_motor', {
+        motor: motor,
+        steps: steps * direction
+    });
+}
+
+function adjustServo(direction) {
+    const delta = SPEEDS[currentSpeed].servo;
+    socket.emit('move_servo_delta', {
+        delta: delta * direction
+    });
+}
+
+function resetHome() {
     socket.emit('set_home');
 }
 
 function clearCanvas() {
-    confirm("Clear the drawing?") && socket.emit('clear_canvas');
+    socket.emit('clear_canvas');
 }
 
 function cancelJob(jobId) {
@@ -127,78 +171,21 @@ function cancelJob(jobId) {
 }
 
 async function uploadFile() {
-    const file = document.getElementById('fileInput').files[0];
+    const fileInput = document.getElementById('fileInput');
+    const file = fileInput.files[0];
     if (!file) return alert('Select a .yaml file');
+
     const formData = new FormData();
     formData.append('file', file);
     try {
-        await fetch('/upload', { method: 'POST', body: formData });
+        const res = await fetch('/upload', { method: 'POST', body: formData });
+        if (!res.ok) {
+            alert('Upload failed');
+        }
     } catch (e) { alert(e); }
 }
 
-// Joystick Logic
-function initJoystick() {
-    const box = document.getElementById('joystick');
-    const handle = document.getElementById('joystick-handle');
-    let resizing = false, bounds, center, radius;
-    let isBusy = false, pendingCommand = null;
-
-    const calcBounds = () => {
-        if (!box) return;
-        bounds = box.getBoundingClientRect();
-        center = { x: bounds.width / 2, y: bounds.height / 2 };
-        radius = bounds.width / 2 - 20;
-    };
-    calcBounds();
-    window.addEventListener('resize', calcBounds);
-
-    const processCommandQueue = (data) => {
-        if (plotterState.is_working) return;
-        if (isBusy) { pendingCommand = data; return; }
-        isBusy = true;
-        socket.emit('move_joystick', data, () => {
-            isBusy = false;
-            if (pendingCommand) {
-                const next = pendingCommand;
-                pendingCommand = null;
-                processCommandQueue(next);
-            }
-        });
-    };
-
-    const move = (cx, cy) => {
-        let x = cx - bounds.left - center.x;
-        let y = cy - bounds.top - center.y;
-        const dist = Math.sqrt(x * x + y * y);
-        if (dist > radius) { x = (x / dist) * radius; y = (y / dist) * radius; }
-        handle.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-        processCommandQueue({ x: (x / radius) * 0.5, y: (y / radius) * 0.5 });
-    };
-
-    const end = () => {
-        resizing = false;
-        handle.style.transform = 'translate(-50%, -50%)';
-    };
-
-    if (handle) {
-        // Mouse
-        handle.addEventListener('mousedown', () => resizing = true);
-        document.addEventListener('mouseup', end);
-        document.addEventListener('mousemove', e => resizing && move(e.clientX, e.clientY));
-
-        // Touch
-        handle.addEventListener('touchstart', (e) => {
-            resizing = true;
-            e.preventDefault(); // Stop scroll
-        });
-        document.addEventListener('touchend', end);
-        document.addEventListener('touchmove', e => {
-            if (resizing) {
-                e.preventDefault(); // Stop scroll
-                move(e.touches[0].clientX, e.touches[0].clientY);
-            }
-        }, { passive: false });
-    }
-}
-
-document.addEventListener('DOMContentLoaded', initJoystick);
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    setSpeed('medium');
+});

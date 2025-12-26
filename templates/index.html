@@ -12,8 +12,85 @@
 
 <body>
     <div class="app-container">
-        <!-- Visualization Top on Mobile, Right on Desktop -->
-        <div class="viz-panel">
+
+        <!-- Sidebar (Queue + Control) -->
+        <div class="sidebar">
+
+            <!-- Panel 1: Job Queue -->
+            <div class="panel job-panel">
+                <h2>Job Queue</h2>
+                <div class="file-upload">
+                    <input type="file" id="fileInput" accept=".yaml">
+                    <button class="primary" onclick="uploadFile()">
+                        <i class="fas fa-plus"></i> Add
+                    </button>
+                </div>
+                <div id="job-list-container" class="job-list">
+                    <div class="empty-msg">Empty</div>
+                </div>
+            </div>
+
+            <!-- Panel 2: Manual Control -->
+            <div class="panel manual-panel">
+                <h2>Control</h2>
+
+                <!-- Combined Speed & Direction Grid -->
+                <div class="control-grid">
+                    <!-- Row 1 -->
+                    <button class="speed-btn" id="btn-slow" onclick="setSpeed('slow')" title="Slow">
+                        <i class="fas fa-walking"></i>
+                    </button>
+                    <button onclick="moveXY(-1, -1)"><i class="fas fa-arrow-up"
+                            style="transform: rotate(-45deg)"></i></button>
+                    <button onclick="moveXY(0, -1)"><i class="fas fa-arrow-up"></i></button>
+                    <button onclick="moveXY(1, -1)"><i class="fas fa-arrow-up"
+                            style="transform: rotate(45deg)"></i></button>
+
+                    <!-- Row 2 -->
+                    <button class="speed-btn active" id="btn-medium" onclick="setSpeed('medium')" title="Medium">
+                        <i class="fas fa-bicycle"></i>
+                    </button>
+                    <button onclick="moveXY(-1, 0)"><i class="fas fa-arrow-left"></i></button>
+                    <button onclick="resetHome()" class="home-btn" title="Reset Home"><i
+                            class="fas fa-crosshairs"></i></button>
+                    <button onclick="moveXY(1, 0)"><i class="fas fa-arrow-right"></i></button>
+
+                    <!-- Row 3 -->
+                    <button class="speed-btn" id="btn-fast" onclick="setSpeed('fast')" title="Fast">
+                        <i class="fas fa-train"></i>
+                    </button>
+                    <button onclick="moveXY(-1, 1)"><i class="fas fa-arrow-down"
+                            style="transform: rotate(45deg)"></i></button>
+                    <button onclick="moveXY(0, 1)"><i class="fas fa-arrow-down"></i></button>
+                    <button onclick="moveXY(1, 1)"><i class="fas fa-arrow-down"
+                            style="transform: rotate(-45deg)"></i></button>
+                </div>
+
+                <!-- Fine Tuning -->
+                <div class="fine-control">
+                    <div class="comp-grp">
+                        <span>L</span>
+                        <button onclick="adjustMotor('left', 1)"><i class="fas fa-chevron-up"></i></button>
+                        <button onclick="adjustMotor('left', -1)"><i class="fas fa-chevron-down"></i></button>
+                    </div>
+                    <div class="comp-grp">
+                        <span>Width</span>
+                        <button onclick="adjustServo(1)"><i class="fas fa-plus"></i></button>
+                        <button onclick="adjustServo(-1)"><i class="fas fa-minus"></i></button>
+                    </div>
+                    <div class="comp-grp">
+                        <span>R</span>
+                        <button onclick="adjustMotor('right', 1)"><i class="fas fa-chevron-up"></i></button>
+                        <button onclick="adjustMotor('right', -1)"><i class="fas fa-chevron-down"></i></button>
+                    </div>
+                </div>
+
+                <button onclick="clearCanvas()" class="danger action-btn"><i class="fas fa-eraser"></i> Clear</button>
+            </div>
+        </div>
+
+        <!-- Visualization -->
+        <div class="panel viz-panel">
             <div id="canvas-wrapper">
                 <img id="plotter-feed" class="plotter-feed">
                 <canvas id="overlay-canvas"></canvas>
@@ -21,49 +98,6 @@
             <div class="status-bar" id="coords-info">Connecting...</div>
         </div>
 
-        <!-- Controls Bottom on Mobile, Left on Desktop -->
-        <div class="controls-panel">
-            <h1><i class="fas fa-robot"></i> MOLER</h1>
-
-            <h2>Job Queue</h2>
-            <div id="job-list-container" class="job-list">
-                <div style="padding:10px; color:#666; text-align:center">Empty</div>
-            </div>
-
-            <h2>Upload</h2>
-            <div class="file-upload">
-                <input type="file" id="fileInput" accept=".yaml" style="color:#aaa; width:100%; margin-bottom:5px;">
-                <button class="primary" onclick="uploadFile()" style="width:100%">
-                    <i class="fas fa-plus"></i> Add Job Sequence
-                </button>
-            </div>
-
-            <h2>Manual</h2>
-            <div class="btn-grid">
-                <button onclick="sendManual('left_up')"><i class="fas fa-arrow-up"></i> L</button>
-                <button onclick="sendManual('right_up')">R <i class="fas fa-arrow-up"></i></button>
-                <button onclick="sendManual('left_down')"><i class="fas fa-arrow-down"></i> L</button>
-                <button onclick="sendManual('right_down')">R <i class="fas fa-arrow-down"></i></button>
-            </div>
-            <div style="margin-top:10px;">
-                <input type="range" id="speedSlider" min="10" max="1000" value="100">
-            </div>
-
-            <div style="display:flex; gap:10px; margin-top:10px;">
-                <button onclick="sendManual('servo')" style="flex:1"><i class="fas fa-pencil-alt"></i> Pen</button>
-                <button onclick="goHome()" style="flex:1" class="primary"><i class="fas fa-home"></i> Home</button>
-            </div>
-
-            <div style="margin-top:10px;">
-                <button onclick="clearCanvas()" style="width:100%"><i class="fas fa-eraser"></i> Clear Canvas</button>
-            </div>
-
-            <div class="joystick-area">
-                <div id="joystick">
-                    <div id="joystick-handle"></div>
-                </div>
-            </div>
-        </div>
     </div>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>

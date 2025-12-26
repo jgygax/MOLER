@@ -3,7 +3,7 @@ from flask import Flask, request, jsonify, render_template
 from flask_socketio import SocketIO, emit
 import yaml
 import os
-from plot.plot import plot_pattern
+from plot.plot import plot_pattern, execute_move_sequence
 from plot import calibrate
 from plot.vplotter import VPlotter
 import threading
@@ -12,6 +12,7 @@ import base64
 import time
 import uuid
 from dotenv import load_dotenv
+import numpy as np
 
 load_dotenv()
 
@@ -35,11 +36,29 @@ os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 job_list = []
 job_lock = threading.Lock()
 current_job_id = None
+current_job_name = None
 current_job_stop_event = None
 is_processing_job = False
 
 thread = None
 thread_lock = threading.Lock()
+
+
+def add_job(job_type, data, name="Job"):
+    """Helper to safely add a job to the queue."""
+    job_id = str(uuid.uuid4())
+    logger.info(f"Queueing job: {name} ({job_type})")
+    with job_lock:
+        job_list.append(
+            {
+                "id": job_id,
+                "type": job_type,
+                "data": data,
+                "name": name,
+            }
+        )
+    broadcast_status_snapshot()
+    return job_id
 
 
 def broadcast_status_snapshot():
@@ -53,6 +72,7 @@ def broadcast_status_snapshot():
         with job_lock:
             queue_snapshot = [{"id": j["id"], "name": j["name"]} for j in job_list]
             curr_id = current_job_id
+            curr_name = current_job_name
             working = is_processing_job
 
         state = {
@@ -64,10 +84,10 @@ def broadcast_status_snapshot():
             "bounds": app.config["CANVAS_BOUNDS"],
             "queue": queue_snapshot,
             "current_job_id": curr_id,
+            "current_job_name": curr_name,
             "is_working": working,
         }
 
-        # Canvas encoding can be heavy, handle lightly if needed
         if hasattr(app.plotter, "canvas") and app.plotter.canvas is not None:
             _, buffer = cv2.imencode(".jpg", app.plotter.canvas)
             state["canvas"] = base64.b64encode(buffer).decode("utf-8")
@@ -79,60 +99,93 @@ def broadcast_status_snapshot():
 
 def job_worker():
     """Background thread to process jobs."""
-    global current_job_stop_event, is_processing_job, current_job_id
+    global current_job_stop_event, is_processing_job, current_job_id, current_job_name
 
     while True:
         job = None
-        # LOCK CRITICAL SECTION
         with job_lock:
             if job_list:
                 job = job_list.pop(0)
-                # Set identity immediately to prevent 'cancel' race condition
                 current_job_id = job["id"]
+                current_job_name = job["name"]
                 current_job_stop_event = threading.Event()
                 is_processing_job = True
 
         if job:
             if app.plotter:
-                logger.info(f"Starting job: {job['name']}")
-                broadcast_status_snapshot()  # Notify UI immediately
+                # logger.info(f"Starting job: {job['name']}")
+                broadcast_status_snapshot()
 
                 try:
+                    # --- Pattern Job ---
                     if job["type"] == "pattern":
                         plot_pattern(
                             app.plotter, job["data"], stop_event=current_job_stop_event
                         )
-                    elif job["type"] == "move":
-                        target = job["target"]
-                        tx, ty = 0, 0
-                        if target == "start":
-                            tx, ty = app.plotter.START_POSITION
-                        elif target == "dock":
-                            tx, ty = app.plotter.DOCK_POSITION
 
-                        # Stop event check before moving
+                    # --- Preset Move (Start/Dock) ---
+                    elif job["type"] == "move":
+                        target = job["data"].get("target")
+                        execute_move_sequence(
+                            app.plotter, target, stop_event=current_job_stop_event
+                        )
+
+                    # --- Manual XY Move ---
+                    elif job["type"] == "manual_xy":
+                        dx = job["data"].get("x", 0)
+                        dy = job["data"].get("y", 0)
+                        curr_x, curr_y = app.plotter.get_current_coords()
                         if not current_job_stop_event.is_set():
-                            app.plotter.move_straight_line(tx, ty, 0)
+                            app.plotter.move_straight_line(
+                                curr_x + dx, curr_y + dy, app.plotter.w
+                            )
+
+                    # --- Manual Motor Step ---
+                    elif job["type"] == "manual_motor":
+                        motor_key = job["data"].get("motor")
+                        steps = int(job["data"].get("steps", 0))
+                        direction = 1 if steps > 0 else -1
+                        count = abs(steps)
+                        if motor_key == "left":
+                            calibrate.steps_left(count * direction, app.plotter)
+                        elif motor_key == "right":
+                            calibrate.steps_right(count * direction, app.plotter)
+                        # Sync Coords
+                        app.plotter.x, app.plotter.y = app.plotter.get_current_coords()
+
+                    # --- Servo Delta ---
+                    elif job["type"] == "manual_servo":
+                        delta = float(job["data"].get("delta", 0))
+                        new_w = np.clip(app.plotter.w + delta, 0, 1)
+                        if not current_job_stop_event.is_set():
+                            app.plotter.move_straight_line(w=new_w)
+
+                    # --- Set Home ---
+                    elif job["type"] == "set_home":
+                        hx, hy = app.plotter.DOCK_POSITION
+                        app.plotter.set_current_position(hx, hy)
+
+                    # --- Clear Canvas ---
+                    elif job["type"] == "clear_canvas":
+                        app.plotter.clear_canvas()
 
                 except Exception as e:
-                    logger.error(f"Error executing job: {e}")
+                    logger.error(f"Error executing job {job['type']}: {e}")
                 finally:
-                    # Clean up strictly
                     with job_lock:
                         is_processing_job = False
                         current_job_id = None
+                        current_job_name = None
                         current_job_stop_event = None
-
-                    logger.info("Job finished")
-                    broadcast_status_snapshot()  # Notify UI completion
+                    broadcast_status_snapshot()
             else:
-                # Rollback if plotter missing
                 with job_lock:
                     is_processing_job = False
                     current_job_id = None
+                    current_job_name = None
                 logger.warning("Plotter not ready, skipping job")
 
-        time.sleep(0.1)
+        time.sleep(0.05)
 
 
 worker_thread = threading.Thread(target=job_worker, daemon=True)
@@ -160,47 +213,34 @@ def handle_disconnect():
     logger.info("Client disconnected")
 
 
-@socketio.on("move_manual")
-def handle_move_manual(data):
-    if is_processing_job:
-        return
-    direction = data.get("direction")
-    speed = int(data.get("speed", 100))
-
-    if direction in ["left_up", "left_down"]:
-        act_speed = speed if direction == "left_up" else -speed
-        calibrate.steps_left(act_speed, app.plotter)
-    elif direction in ["right_up", "right_down"]:
-        act_speed = speed if direction == "right_up" else -speed
-        calibrate.steps_right(act_speed, app.plotter)
-    elif direction == "servo":
-        calibrate.calibrate_servo(speed / 10, app.plotter)
+@socketio.on("move_xy")
+def handle_move_xy(data):
+    """Queues a XY move command."""
+    add_job("manual_xy", data, "Manual Move")
 
 
-@socketio.on("move_joystick")
-def handle_joystick(data):
-    if app.plotter is None or is_processing_job:
-        return
-    delta_x = data.get("x", 0)
-    delta_y = data.get("y", 0)
-    curr_x, curr_y = app.plotter.get_current_coords()
-    app.plotter.move_straight_line(curr_x + delta_x, curr_y + delta_y, app.plotter.w)
-    return {"status": "done"}
+@socketio.on("move_raw_motor")
+def handle_raw_motor(data):
+    """Queues a motor step command."""
+    add_job("manual_motor", data, "Motor Adjust")
+
+
+@socketio.on("move_servo_delta")
+def handle_servo_delta(data):
+    """Queues a servo change."""
+    add_job("manual_servo", data, "Pen Width")
 
 
 @socketio.on("set_home")
 def handle_home():
-    if is_processing_job:
-        return
-    if app.plotter:
-        hx, hy = app.plotter.DOCK_POSITION
-        app.plotter.set_current_position(hx, hy)
+    """Queues a home reset."""
+    add_job("set_home", {}, "Set Home")
 
 
 @socketio.on("clear_canvas")
 def handle_clear():
-    if app.plotter:
-        app.plotter.clear_canvas()
+    """Queues a canvas clear."""
+    add_job("clear_canvas", {}, "Clear Canvas")
 
 
 @socketio.on("cancel_job")
@@ -210,18 +250,14 @@ def handle_cancel_job(data):
     logger.info(f"Cancel requested for ID: {job_id}")
 
     with job_lock:
-        # 1. Remove from waiting queue first
         initial_len = len(job_list)
         job_list[:] = [j for j in job_list if j["id"] != job_id]
 
-        # 2. Check if it is the actively running job
         if is_processing_job and current_job_id == job_id and current_job_stop_event:
             current_job_stop_event.set()
-            logger.info("Sent stop signal to active job")
         elif len(job_list) < initial_len:
             logger.info("Removed job from queue")
 
-    # 3. Force immediate UI update
     broadcast_status_snapshot()
 
 
@@ -241,35 +277,10 @@ def upload_file():
         content = file.read().decode("utf-8")
         parsed_data = yaml.safe_load(content)
 
-        with job_lock:
-            # Add Sequence: Start -> Pattern -> Dock
-            job_list.append(
-                {
-                    "id": str(uuid.uuid4()),
-                    "type": "move",
-                    "target": "start",
-                    "name": "Move to Start",
-                }
-            )
-            job_list.append(
-                {
-                    "id": str(uuid.uuid4()),
-                    "type": "pattern",
-                    "data": parsed_data,
-                    "name": file.filename,
-                }
-            )
-            job_list.append(
-                {
-                    "id": str(uuid.uuid4()),
-                    "type": "move",
-                    "target": "dock",
-                    "name": "Return to Dock",
-                }
-            )
+        add_job("move", {"target": "start"}, f"Init {file.filename}")
+        add_job("pattern", parsed_data, f"Draw {file.filename}")
+        add_job("move", {"target": "dock"}, f"Cleanup {file.filename}")
 
-        broadcast_status_snapshot()  # Immediate update
-        logger.info(f"Job sequence enqueued for: {file.filename}")
         return jsonify({"status": "Jobs enqueued"}), 200
     except Exception as e:
         logger.error(f"Failed: {str(e)}")

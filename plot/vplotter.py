@@ -122,7 +122,7 @@ class VPlotter:
     STEPS_PER_REVOLUTION = 4096
     SPOOL_CIRCUMFERENCE = 125  # mm
     PIXELS_PER_MM = 1  # mm
-    MAX_CIRCLE_DIAMETER = 5  # mm
+    MAX_CIRCLE_DIAMETER = 3  # mm
 
     DOCK_POSITION = MOTOR_DISTANCE / 2, 125
     START_POSITION = MOTOR_DISTANCE / 2, 200
@@ -191,6 +191,17 @@ class VPlotter:
         self.canvas = (
             np.ones((self.canvas_height, self.canvas_width, 3), dtype=np.uint8) * 255
         )
+
+    def update_canvas(self):
+        current_x, current_y = self.get_current_coords()
+        pixel_x = int(current_x * VPlotter.PIXELS_PER_MM)
+        pixel_y = int(current_y * VPlotter.PIXELS_PER_MM)
+
+        circle_diameter_mm = VPlotter.MAX_CIRCLE_DIAMETER * self.w
+        radius_pixels = int(circle_diameter_mm * VPlotter.PIXELS_PER_MM)
+
+        if radius_pixels > 0:
+            cv2.circle(self.canvas, (pixel_x, pixel_y), radius_pixels, (255, 0, 0), -1)
 
     @classmethod
     def calculate_string_lengths(cls, x, y):
@@ -286,14 +297,4 @@ class VPlotter:
             self.servo_pwm.ChangeDutyCycle(duty_cycle)
             self.w = w
 
-            current_x, current_y = self.get_current_coords()
-            pixel_x = int(current_x * VPlotter.PIXELS_PER_MM)
-            pixel_y = int(current_y * VPlotter.PIXELS_PER_MM)
-
-            circle_diameter_mm = VPlotter.MAX_CIRCLE_DIAMETER * w
-            radius_pixels = int((circle_diameter_mm / 3) * VPlotter.PIXELS_PER_MM)
-
-            if radius_pixels > 0:
-                cv2.circle(
-                    self.canvas, (pixel_x, pixel_y), radius_pixels, (255, 0, 0), -1
-                )
+            self.update_canvas()
