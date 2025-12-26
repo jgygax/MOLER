@@ -4,11 +4,15 @@ import time
 import cv2
 import numpy as np
 import os
+import logging
+
+# Configure logger for this module
+logger = logging.getLogger(__name__)
 
 try:
     import RPi.GPIO as GPIO
 except ImportError:
-    print("Hardware libraries not found, using mocks")
+    logger.warning("Hardware libraries not found, using mocks")
     from plot.mock import MockGPIO as GPIO
 
 
@@ -67,7 +71,7 @@ class StepperMotor:
         for _ in range(count):
             current_time = time.time()
             sleep_time = update_interval - (current_time - self.last_step_time)
-            if sleep_time > 0 and not os.getenv("NO_SLEEP").lower() == "true":
+            if sleep_time > 0 and not os.getenv("NO_SLEEP", "false").lower() == "true":
                 time.sleep(sleep_time)
             self.last_step_time = current_time
 
@@ -147,9 +151,10 @@ class VPlotter:
             self.STEPS_PER_REVOLUTION,
         )
 
-        canvas_width = int(VPlotter.MOTOR_DISTANCE * VPlotter.PIXELS_PER_CM)
-        canvas_height = int(40 * VPlotter.PIXELS_PER_CM)
-        self.canvas = np.ones((canvas_height, canvas_width, 3), dtype=np.uint8) * 255
+        self.canvas_width = int(VPlotter.MOTOR_DISTANCE * VPlotter.PIXELS_PER_CM)
+        self.canvas_height = int(40 * VPlotter.PIXELS_PER_CM)
+        self.clear_canvas()
+        logger.info("VPlotter Initialized")
 
     def __enter__(self):
         GPIO.setmode(GPIO.BCM)
@@ -166,7 +171,7 @@ class VPlotter:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        print("Cleaning up VPlotter...")
+        logger.info("Cleaning up VPlotter...")
         self.pen_up()
         self.servo_pwm.stop()
 
@@ -175,6 +180,13 @@ class VPlotter:
 
         GPIO.cleanup()
 
+    def clear_canvas(self):
+        """Resets the internal canvas to white."""
+        logger.debug("Canvas cleared")
+        self.canvas = (
+            np.ones((self.canvas_height, self.canvas_width, 3), dtype=np.uint8) * 255
+        )
+
     @classmethod
     def calculate_string_lengths(cls, x, y):
         """Calculate string lengths for given x,y coordinates"""
@@ -182,6 +194,7 @@ class VPlotter:
         s_right = ((cls.MOTOR_DISTANCE - x) ** 2 + y**2) ** 0.5
 
         if s_left < 0 or s_right < 0:
+            logger.error("Calculation Error: strings must be longer than 0 cm")
             raise ValueError("strings must be longer than 0 cm")
 
         return s_left, s_right
@@ -189,8 +202,6 @@ class VPlotter:
     @classmethod
     def calculate_coords(cls, s_left, s_right):
         """Calculate x,y coordinates from given string lengths"""
-
-        print("CALCCOORDS", s_left, s_right)
 
         if s_left < 0 or s_right < 0:
             raise ValueError("string lengths must be positive")
@@ -203,7 +214,7 @@ class VPlotter:
         y_squared = s_left**2 - x**2
 
         if y_squared < 0:
-            raise ValueError("invalid string lengths - no valid position exists")
+            raise ValueError("invalid string lengths")
 
         y = y_squared**0.5
 
@@ -213,6 +224,15 @@ class VPlotter:
         return self.calculate_coords(
             self.left_motor.get_sting_length(), self.right_motor.get_sting_length()
         )
+
+    def set_current_position(self, x, y):
+        """Forcing the logic to believe we are at x,y and recalibrating motor revolutions"""
+        logger.info(f"Forcing position set to: {x}, {y}")
+        s_left, s_right = self.calculate_string_lengths(x, y)
+        self.left_motor.revolutions = self.left_motor.get_revolutions(s_left)
+        self.right_motor.revolutions = self.right_motor.get_revolutions(s_right)
+        self.x = x
+        self.y = y
 
     def pen_up(self):
         self.servo_pwm.ChangeDutyCycle(VPlotter.PEN_UP_DUTY)
@@ -238,11 +258,23 @@ class VPlotter:
         start_z = self.z
 
         # compute target string lengths
-        target_left, target_right = self.calculate_string_lengths(target_x, target_y)
+        try:
+            target_left, target_right = self.calculate_string_lengths(
+                target_x, target_y
+            )
+        except ValueError as e:
+            logger.error(f"Move failed: {e}")
+            return
+
         n_steps_left = self.left_motor.count_steps_to_target(target_left)
         n_steps_right = self.right_motor.count_steps_to_target(target_right)
 
         max_steps = max(abs(n_steps_left), abs(n_steps_right))
+
+        # Avoid division by zero if already there
+        if max_steps == 0:
+            return
+
         for i in range(max_steps):
             progress = i / max_steps
 

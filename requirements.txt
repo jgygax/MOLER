@@ -1,4 +1,7 @@
 Flask
 PyYAML
-opencv-python
 python-dotenv
+opencv-python
+numpy
+flask-socketio
+eventlet
