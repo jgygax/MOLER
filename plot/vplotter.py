@@ -112,8 +112,8 @@ class VPlotter:
         0: [23, 24, 25, 8],  # Left motor pins
         1: [5, 6, 13, 26],  # Right motor pins
     }
-    SPEED_UP = 1
-    SPEED_DOWN = 1
+    SPEED_UP = 0.5
+    SPEED_DOWN = 1.5
     MOTOR_DISTANCE = 40
     SERVO_PIN = 10
     SERVO_FREQUENCY = 50
@@ -122,7 +122,7 @@ class VPlotter:
     STEPS_PER_REVOLUTION = 4096
     SPOOL_CIRCUMFERENCE = 12.5
     PIXELS_PER_CM = 10
-    MAX_CIRCLE_DIAMETER_CM = 1.0
+    MAX_CIRCLE_DIAMETER_CM = 0.5
 
     def __init__(self):
         self.x = VPlotter.MOTOR_DISTANCE / 2

@@ -28,14 +28,13 @@ function updateVisuals(data) {
     // Ensure logic happens only when image has dimensions
     if (imgMsg.clientWidth === 0) return;
 
-    // Match canvas to image dimensions exactly to fix offset issues
+    // Match canvas to image dimensions exactly
     canvas.width = imgMsg.clientWidth;
     canvas.height = imgMsg.clientHeight;
 
     const ctx = canvas.getContext('2d');
 
     // Scale: Physical Width (cm) -> Visual Width (px)
-    // Avoid using fixed PPM, use the actually displayed ratio
     const scale = canvas.width / data.motor_distance;
 
     const mx_left = 0;
@@ -50,7 +49,6 @@ function updateVisuals(data) {
     const b_left = canvasBounds.left * scale;
     const b_top = canvasBounds.top * scale;
     const b_w = (data.motor_distance - canvasBounds.left - canvasBounds.right) * scale;
-    // Arbitrary large height for bounds or match canvas
     const b_h = canvas.height - b_top;
 
     ctx.strokeStyle = 'rgba(255, 115, 0, 0.2)';
@@ -100,7 +98,6 @@ async function uploadFile() {
     try {
         const res = await fetch('/upload', { method: 'POST', body: formData });
         const d = await res.json();
-        // alert(d.status || d.error);
     } catch (e) { alert(e); }
 }
 
@@ -111,6 +108,10 @@ function initJoystick() {
     let resizing = false;
     let bounds, center, radius;
 
+    // Queue Logic variables
+    let isBusy = false;
+    let pendingCommand = null;
+
     const calcBounds = () => {
         if (!box) return;
         bounds = box.getBoundingClientRect();
@@ -119,6 +120,26 @@ function initJoystick() {
     };
     calcBounds();
     window.addEventListener('resize', calcBounds);
+
+    const processCommandQueue = (data) => {
+        // If system is busy, store the LATEST command (overwrite old) and return
+        if (isBusy) {
+            pendingCommand = data;
+            return;
+        }
+
+        isBusy = true;
+        socket.emit('move_joystick', data, (ack) => {
+            // ACK received from server
+            isBusy = false;
+            // If a new command arrived while we were busy, send it now
+            if (pendingCommand) {
+                const next = pendingCommand;
+                pendingCommand = null;
+                processCommandQueue(next);
+            }
+        });
+    };
 
     const move = (cx, cy) => {
         let x = cx - bounds.left - center.x;
@@ -129,8 +150,8 @@ function initJoystick() {
             y = (y / dist) * radius;
         }
         handle.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-        // Emit logic
-        socket.emit('move_joystick', {
+
+        processCommandQueue({
             x: (x / radius) * 0.5,
             y: (y / radius) * 0.5
         });

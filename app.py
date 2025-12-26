@@ -37,25 +37,27 @@ thread_lock = threading.Lock()
 def background_status_thread():
     while True:
         if app.plotter:
-            plotter_x, plotter_y = app.plotter.get_current_coords()
-            state = {
-                "active": True,
-                "x": plotter_x,
-                "y": plotter_y,
-                "z": app.plotter.z,
-                "motor_distance": app.plotter.MOTOR_DISTANCE,
-                "bounds": app.config["CANVAS_BOUNDS"],
-            }
+            try:
+                plotter_x, plotter_y = app.plotter.get_current_coords()
+                state = {
+                    "active": True,
+                    "x": plotter_x,
+                    "y": plotter_y,
+                    "z": app.plotter.z,
+                    "motor_distance": app.plotter.MOTOR_DISTANCE,
+                    "bounds": app.config["CANVAS_BOUNDS"],
+                }
 
-            if hasattr(app.plotter, "canvas") and app.plotter.canvas is not None:
-                try:
-                    _, buffer = cv2.imencode(".jpg", app.plotter.canvas)
-                    state["canvas"] = base64.b64encode(buffer).decode("utf-8")
-                except Exception as e:
-                    logger.error(f"Error encoding canvas: {e}")
+                if hasattr(app.plotter, "canvas") and app.plotter.canvas is not None:
+                    try:
+                        _, buffer = cv2.imencode(".jpg", app.plotter.canvas)
+                        state["canvas"] = base64.b64encode(buffer).decode("utf-8")
+                    except Exception as e:
+                        logger.error(f"Error encoding canvas: {e}")
 
-            socketio.emit("status_update", state)
-
+                socketio.emit("status_update", state)
+            except Exception as e:
+                logger.warning(e)
         socketio.sleep(0.1)
 
 
@@ -94,14 +96,16 @@ def handle_move_manual(data):
 def handle_joystick(data):
     if app.plotter is None:
         return
+
+    # Returning data from an event handler acts as an acknowledgement
+    # to the client. We fetch fresh coords before moving.
     delta_x = data.get("x", 0)
     delta_y = data.get("y", 0)
 
-    # Logging joystick is too verbose for INFO, keep to DEBUG
-    # logger.debug(f"Joystick move: {delta_x}, {delta_y}")
-
     curr_x, curr_y = app.plotter.get_current_coords()
     app.plotter.move_straight_line(curr_x + delta_x, curr_y + delta_y, app.plotter.z)
+
+    return {"status": "done", "new_x": curr_x + delta_x, "new_y": curr_y + delta_y}
 
 
 @socketio.on("set_home")
