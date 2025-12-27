@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 try:
     import RPi.GPIO as GPIO
-except ImportError:
+except ImportError as e:
     logger.warning("Hardware libraries not found, using mocks")
     from plot.mock import MockGPIO as GPIO
 
@@ -60,11 +60,14 @@ class StepperMotor:
         for pin in self.pins:
             GPIO.output(pin, GPIO.LOW)
 
-    def step(self, count=1, direction=1):
+    def step(self, count=1, direction=1, speed_mulitplier=None):
         if direction == self.up_direction:
             speed = self.speed_up
         else:
             speed = self.speed_down
+
+        if speed_mulitplier is not None:
+            speed *= speed_mulitplier
 
         update_interval = 1 / (self.steps_per_revolution * speed)
 
@@ -89,7 +92,7 @@ class StepperMotor:
             * self.steps_per_revolution
         )
 
-    def move_to_target(self, target_string_length):
+    def move_to_target(self, target_string_length, speed_mulitplier=None):
         current_string_length = self.get_string_length()
         if target_string_length < current_string_length:
             direction = -self.up_direction
@@ -97,7 +100,9 @@ class StepperMotor:
             direction = self.up_direction
 
         self.step(
-            count=self.count_steps_to_target(target_string_length), direction=direction
+            count=self.count_steps_to_target(target_string_length),
+            direction=direction,
+            speed_mulitplier=speed_mulitplier,
         )
 
     def get_revolutions(self, string_length):
@@ -112,8 +117,8 @@ class VPlotter:
         0: [23, 24, 25, 8],  # Left motor pins
         1: [5, 6, 13, 26],  # Right motor pins
     }
-    SPEED_UP = 0.6
-    SPEED_DOWN = 0.3
+    SPEED_UP = 0.08
+    SPEED_DOWN = 0.08
     MOTOR_DISTANCE = 400  # mm
     SERVO_PIN = 10
     SERVO_FREQUENCY = 50
@@ -125,7 +130,7 @@ class VPlotter:
     MAX_CIRCLE_DIAMETER = 1  # mm
 
     DOCK_POSITION = MOTOR_DISTANCE / 2, 125
-    START_POSITION = MOTOR_DISTANCE / 2, 200
+    START_POSITION = MOTOR_DISTANCE / 2, 150
 
     def __init__(self):
         self.x = VPlotter.MOTOR_DISTANCE / 2
@@ -141,7 +146,7 @@ class VPlotter:
             self.MOTOR_PINS[0],
             self.SPEED_UP,
             self.SPEED_DOWN,
-            1,
+            -1,
             s_left,
             self.SPOOL_CIRCUMFERENCE,
             self.STEPS_PER_REVOLUTION,
@@ -150,7 +155,7 @@ class VPlotter:
             self.MOTOR_PINS[1],
             self.SPEED_UP,
             self.SPEED_DOWN,
-            -1,
+            1,
             s_right,
             self.SPOOL_CIRCUMFERENCE,
             self.STEPS_PER_REVOLUTION,
@@ -256,11 +261,13 @@ class VPlotter:
 
     def pen_up(self):
         self.move_straight_line(w=0)
+        time.sleep(0.5)
 
     def pen_down(self):
         self.move_straight_line(w=1)
+        time.sleep(0.5)
 
-    def move_straight_line(self, x=None, y=None, w=None):
+    def move_straight_line(self, x=None, y=None, w=None, speed_mulitplier=None):
         """Move to target position in a straight line with smooth interpolation."""
 
         start_x, start_y = self.get_current_coords()
@@ -287,8 +294,8 @@ class VPlotter:
             left, right = self.calculate_string_lengths(x, y)
 
             # Update steppers, steppers will block / sleep when needed
-            self.left_motor.move_to_target(left)
-            self.right_motor.move_to_target(right)
+            self.left_motor.move_to_target(left, speed_mulitplier=speed_mulitplier)
+            self.right_motor.move_to_target(right, speed_mulitplier=speed_mulitplier)
 
             # Update servo
             duty_cycle = self.interpolate(
