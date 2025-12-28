@@ -34,12 +34,15 @@ def execute_move_sequence(plotter, target, stop_event=None, speed_mulitplier=Non
         # Then move to dock
         if stop_event and stop_event.is_set():
             return
+        # Go a bit above, and jiggle back to position
         plotter.move_straight_line(
             dock_x, dock_y - 10, 0, speed_mulitplier=speed_mulitplier
         )
+        # set strings to known positions
+        plotter.set_current_position(*plotter.DOCK_POSITION)
 
 
-def plot_pattern(plotter, pattern, stop_event=None, home_distance=750):
+def plot_pattern(plotter, pattern, stop_event=None, home_distance=1000):
     if stop_event and stop_event.is_set():
         return
 

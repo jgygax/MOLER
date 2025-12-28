@@ -117,8 +117,8 @@ class VPlotter:
         0: [23, 24, 25, 8],  # Left motor pins
         1: [5, 6, 13, 26],  # Right motor pins
     }
-    SPEED_UP = 0.08
-    SPEED_DOWN = 0.08
+    SPEED_UP = 0.06
+    SPEED_DOWN = 0.06
     MOTOR_DISTANCE = 400  # mm
     SERVO_PIN = 10
     SERVO_FREQUENCY = 50
@@ -128,6 +128,8 @@ class VPlotter:
     SPOOL_CIRCUMFERENCE = 125  # mm
     PIXELS_PER_MM = 1  # mm
     MAX_CIRCLE_DIAMETER = 1  # mm
+    X_OFFSET_AMOUNT = 1  # mm offset per 100mm vertical
+    W_OFFSET_THRESHOLD = 0.1
 
     DOCK_POSITION = MOTOR_DISTANCE / 2, 125
     START_POSITION = MOTOR_DISTANCE / 2, 150
@@ -137,6 +139,10 @@ class VPlotter:
         # mm
         self.y = 125
         self.w = 0
+
+        # Track lag-behind position
+        self.lag_x = self.x
+        self.lag_y = self.y
 
         self.servo_pwm = None
 
@@ -278,8 +284,29 @@ class VPlotter:
 
         start_w = self.w
 
-        # compute target string lengths
-        target_left, target_right = self.calculate_string_lengths(target_x, target_y)
+        # Calculate offset to compensate for lag
+        dx = target_x - self.lag_x
+        dy = target_y - self.lag_y
+        distance = math.sqrt(dx**2 + dy**2)
+
+        if distance > 0 and target_w > self.W_OFFSET_THRESHOLD:
+            # Unit vector in direction of movement
+            unit_x = dx / distance
+            # Apply offset in x direction
+            offset_amount = target_y / 100 * self.X_OFFSET_AMOUNT
+            x_offset = unit_x * offset_amount
+            adjusted_target_x = target_x + x_offset
+        else:
+            adjusted_target_x = target_x
+
+        # Update lag position to the original target
+        self.lag_x = target_x
+        self.lag_y = target_y
+
+        # compute target string lengths using adjusted position
+        target_left, target_right = self.calculate_string_lengths(
+            adjusted_target_x, target_y
+        )
         n_steps_left = self.left_motor.count_steps_to_target(target_left)
         n_steps_right = self.right_motor.count_steps_to_target(target_right)
         max_steps = max(1, abs(n_steps_left), abs(n_steps_right))
@@ -287,7 +314,7 @@ class VPlotter:
         for i in range(max_steps):
             progress = (i + 1) / max_steps
 
-            x = self.interpolate(start_x, target_x, progress)
+            x = self.interpolate(start_x, adjusted_target_x, progress)
             y = self.interpolate(start_y, target_y, progress)
             w = self.interpolate(start_w, target_w, progress)
 

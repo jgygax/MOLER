@@ -45,6 +45,7 @@ def load_history():
 
 
 def save_history(history):
+    logger.debug(("save history", HISTORY_FILE))
     with open(HISTORY_FILE, "w") as f:
         json.dump(history, f, indent=2)
 
@@ -120,6 +121,7 @@ def check_and_update_jobs():
 
                     if data.get("error"):
                         job["status"] = "failed"
+                        logger.warning(("error", job))
                         updated = True
                         continue
 
@@ -148,6 +150,7 @@ def check_and_update_jobs():
 
                     job["assets"] = job_assets
                     if new_asset_found:
+                        save_history(history)
                         updated = True
 
                     # Check completion status
