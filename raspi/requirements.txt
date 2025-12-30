@@ -1,0 +1,9 @@
+PyYAML
+python-dotenv
+opencv-python
+numpy
+flask
+flask-socketio
+requests
+Pillow
+gunicorn
