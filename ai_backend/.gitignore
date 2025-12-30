@@ -1,0 +1,10 @@
+*.png
+test/
+__pycache__
+uploads/
+test/
+results/
+cache.json
+jobs.json
+.huggingface-cache
+test_*

@@ -1,0 +1,4 @@
+ai_backend/handwriting/checkpoints filter=lfs diff=lfs merge=lfs -text
+ai_backend/handwriting/styles filter=lfs diff=lfs merge=lfs -text
+ai_backend/handwriting/checkpoints/** filter=lfs diff=lfs merge=lfs -text
+ai_backend/handwriting/styles/** filter=lfs diff=lfs merge=lfs -text

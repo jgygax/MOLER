@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MOLER</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.js"></script>
+    {% block head %}{% endblock %}
+</head>
+
+<body>
+    <div class="nav-bar">
+        <a href="{{ url_for('home') }}" class="brand">MOLER</a>
+        <div class="nav-links">
+            <a href="{{ url_for('plotter.index') }}"
+                class="{{ 'active' if request.endpoint and 'plotter' in request.endpoint }}">Plotter</a>
+            <a href="/processor" class="">AI Lab</a>
+        </div>
+    </div>
+
+    <div class="main-content">
+        {% block content %}{% endblock %}
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>

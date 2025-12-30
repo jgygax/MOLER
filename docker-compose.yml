@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  raspi:
+    build: ./raspi
+    ports:
+      - "5003:5001"
+    volumes:
+      - ./raspi/:/app/
+    environment:
+      - LOG_LEVEL=DEBUG
+      - NO_SLEEP=true
+      - DRAW_API_URL=http://100.96.142.12:30734
+    command: gunicorn --worker-class gthread --threads 4 --bind 0.0.0.0:5001 app:app
+
+  ai_backend:
+    build: ./ai_backend
+    ports:
+      - "5002:5002"
+    volumes:
+      - ./ai_backend/:/app/
+      - ./raspi/plot:/app/plot  # Shared library mapping
+      - /mnt/data/models/imgen/comfyui:/app/models/imgen/comfyui
+    environment:
+      - LOG_LEVEL=DEBUG
+      - HF_TOKEN=${HF_TOKEN} 
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      - raspi
+    command: gunicorn --worker-class gthread --threads 4 --bind 0.0.0.0:5002 app:app
