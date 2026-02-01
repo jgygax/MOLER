@@ -273,30 +273,95 @@ def run_workflow():
         return jsonify({"error": str(e)}), 500
 
 
+def _get_cached_job_status(job_id):
+    """Get job status from local metadata if available, including full cached data from backend."""
+    if not os.path.exists(UPLOAD_FOLDER):
+        return None
+    for image_id in os.listdir(UPLOAD_FOLDER):
+        image_dir = os.path.join(UPLOAD_FOLDER, image_id)
+        if not os.path.isdir(image_dir):
+            continue
+        metadata_path = os.path.join(image_dir, "metadata.json")
+        if os.path.exists(metadata_path):
+            try:
+                with open(metadata_path, "r") as f:
+                    meta = json.load(f)
+                for w in meta.get("workflows", []):
+                    if w.get("job_id") == job_id:
+                        # Return full cached job data if available (exact same format as backend)
+                        cached_data = w.get("cached_job_data")
+                        if cached_data:
+                            return cached_data
+                        # Fallback to basic info if no full cache
+                        return {
+                            "job_id": job_id,
+                            "status": w.get("status"),
+                            "start_time": w.get("start_time"),
+                            "end_time": w.get("end_time"),
+                        }
+            except Exception:
+                continue
+    return None
+
+
 @processor_bp.route("/processor/status", methods=["GET"])
 def get_status():
     job_ids = request.args.get("ids", "")
     if not job_ids:
         return jsonify([])
 
-    try:
-        response = requests.get(f"{AI_BACKEND_URL}/status", params={"ids": job_ids})
-        if response.status_code != 200:
-            return (
-                jsonify({"error": f"AI Backend error: {response.text}"}),
-                response.status_code,
+    job_id_list = [jid.strip() for jid in job_ids.split(",") if jid.strip()]
+    results = []
+    jobs_to_query = []
+
+    # First, check local cache for each job
+    for job_id in job_id_list:
+        cached = _get_cached_job_status(job_id)
+        if cached and cached.get("status") in ["completed", "failed"]:
+            # Job is finished, use cached status
+            results.append(cached)
+        else:
+            # Need to query backend for this job
+            jobs_to_query.append(job_id)
+
+    # Only query backend for jobs that need fresh status
+    if jobs_to_query:
+        try:
+            query_ids = ",".join(jobs_to_query)
+            response = requests.get(
+                f"{AI_BACKEND_URL}/status", params={"ids": query_ids}, timeout=5
             )
+            if response.status_code == 200:
+                backend_jobs = response.json()
+                results.extend(backend_jobs)
+            else:
+                # Backend returned error, try to use cached data for pending/running jobs
+                logger.warning(
+                    f"AI Backend returned error {response.status_code}, using cached data"
+                )
+                for job_id in jobs_to_query:
+                    cached = _get_cached_job_status(job_id)
+                    if cached:
+                        results.append(cached)
+                    else:
+                        # No cache, return as unknown
+                        results.append(
+                            {"job_id": job_id, "status": "unknown", "error": "backend unreachable"}
+                        )
+        except Exception as e:
+            logger.error(f"Status check error: {e}")
+            # Backend unreachable, use cached data for all remaining jobs
+            for job_id in jobs_to_query:
+                cached = _get_cached_job_status(job_id)
+                if cached:
+                    results.append(cached)
+                else:
+                    # No cache, return as unknown
+                    results.append(
+                        {"job_id": job_id, "status": "unknown", "error": "backend unreachable"}
+                    )
 
-        jobs = response.json()
-
-        # Optionally: Update local metadata based on status
-        # This is a bit complex because we don't know which image_id each job belongs to without a lookup
-        # But for now, we can just return the jobs to the client and let the client handle it.
-
-        return jsonify(jobs)
-    except Exception as e:
-        logger.error(f"Status check error: {e}")
-        return jsonify({"error": str(e)}), 500
+    return jsonify(results)
 
 
 def _get_artifact_path(job_id, file_hash, slug_hint="artifact"):
@@ -351,6 +416,13 @@ def _get_artifact_path_by_slug(job_id, slug):
     for path in Path(local_dir).glob(f"{slug}*"):
         if path.is_file():
             return str(path)
+    
+    # Special handling for slicer: scan for any yaml files if exact slug not found
+    if slug.startswith('slicer'):
+        yaml_files = list(Path(local_dir).glob('*.yaml'))
+        if yaml_files:
+            # Return the first yaml file found (or could sort by timestamp)
+            return str(yaml_files[0])
 
     # Fetch from AI backend by slug
     try:
@@ -539,7 +611,7 @@ def background_processor_thread():
                         job_id = job.get("job_id")
 
                         if status in ["completed", "failed"]:
-                            _update_metadata_status(job_id, status)
+                            _update_metadata_status(job_id, status, job)
 
                             with monitored_lock:
                                 if job_id in monitored_jobs:
@@ -573,8 +645,8 @@ def background_processor_thread():
         time.sleep(2)
 
 
-def _update_metadata_status(job_id, status):
-    """Finds the image containing this job_id and updates its status in metadata.json."""
+def _update_metadata_status(job_id, status, job_data=None):
+    """Finds the image containing this job_id and updates its status and cached data in metadata.json."""
     if not os.path.exists(UPLOAD_FOLDER):
         return
     for image_id in os.listdir(UPLOAD_FOLDER):
@@ -593,6 +665,10 @@ def _update_metadata_status(job_id, status):
                         if w.get("status") != status:
                             w["status"] = status
                             w["end_time"] = datetime.now().isoformat()
+                            updated = True
+                        # Store full job data cache when completed/failed
+                        if job_data and status in ["completed", "failed"]:
+                            w["cached_job_data"] = job_data
                             updated = True
 
                 if updated:
