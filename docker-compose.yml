@@ -9,7 +9,7 @@ services:
       - ./raspi/:/app/
     environment:
       - LOG_LEVEL=DEBUG
-      - NO_SLEEP=true
+      - NO_SLEEP=false
       - DRAW_API_URL=http://100.96.142.12:30734
     command: gunicorn --worker-class gthread --threads 4 --bind 0.0.0.0:5001 app:app
 

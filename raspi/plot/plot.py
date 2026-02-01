@@ -16,6 +16,8 @@ def execute_move_sequence(plotter, target, stop_event=None, speed_mulitplier=Non
     dock_x, dock_y = plotter.DOCK_POSITION
 
     if target == "start":
+        # Set LED to green when going to start
+        plotter.set_led_go_start()
         # Just move to start (after pen up)
         if stop_event and stop_event.is_set():
             return
@@ -24,6 +26,8 @@ def execute_move_sequence(plotter, target, stop_event=None, speed_mulitplier=Non
         )
 
     elif target == "dock":
+        # Set LED to red when going home
+        plotter.set_led_go_home()
         # Move to start first
         if stop_event and stop_event.is_set():
             return
@@ -41,6 +45,9 @@ def execute_move_sequence(plotter, target, stop_event=None, speed_mulitplier=Non
         # set strings to known positions
         plotter.set_current_position(*plotter.DOCK_POSITION)
 
+    # Reset LED to idle after movement
+    plotter.set_led_idle()
+
 
 def plot_pattern(plotter, pattern, stop_event=None):
     if stop_event and stop_event.is_set():
@@ -48,6 +55,8 @@ def plot_pattern(plotter, pattern, stop_event=None):
 
     # Pen Up before starting specific pattern sequence
     plotter.pen_up()
+    # Set LED to painting mode (idle/blue)
+    plotter.set_led_idle()
 
     total_distance = 0
 
@@ -71,9 +80,13 @@ def plot_pattern(plotter, pattern, stop_event=None):
             if stop_event and stop_event.is_set():
                 break
             x, y, w = point["x"], point["y"], point["w"]
+            # Update LED color based on paint width
+            plotter.set_led_paint(w)
             plotter.move_straight_line(x, y, w)
 
         plotter.pen_up()
+        # Reset LED to idle after finishing the line
+        plotter.set_led_idle()
 
         if home_distance and total_distance > home_distance:
             execute_move_sequence(plotter, "dock", stop_event, speed_mulitplier=1)

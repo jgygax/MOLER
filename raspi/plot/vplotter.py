@@ -15,6 +15,8 @@ except ImportError as e:
     logger.warning("Hardware libraries not found, using mocks")
     from plot.mock import MockGPIO as GPIO
 
+from plot.led_controller import create_led_controller, interpolate_color
+
 
 class StepperMotor:
     HALF_STEP_SEQUENCE = [
@@ -137,6 +139,12 @@ class VPlotter:
     DOCK_POSITION = MOTOR_DISTANCE / 2, 80
     START_POSITION = MOTOR_DISTANCE / 2, 150
 
+    # LED Color Configuration (RGB)
+    COLOR_IDLE = (0, 0, 64)  # Dim blue "accent" color when idle/up (width=0)
+    COLOR_PAINT_MAX = (255, 255, 255)  # Pure white at width=1
+    COLOR_GO_HOME = (255, 0, 0)  # Red when going home
+    COLOR_GO_START = (0, 255, 0)  # Green when going to start
+
     def __init__(self):
         self.x, self.y = self.DOCK_POSITION
         self.w = 0
@@ -176,6 +184,11 @@ class VPlotter:
         self.canvas_width = int(VPlotter.MOTOR_DISTANCE * VPlotter.PIXELS_PER_MM)
         self.canvas_height = int(VPlotter.MOTOR_DISTANCE * VPlotter.PIXELS_PER_MM)
         self.clear_canvas()
+
+        # Initialize LED controller
+        self.led = create_led_controller()
+        self.led_color = self.COLOR_IDLE
+
         logger.info("VPlotter Initialized")
 
     def __enter__(self):
@@ -190,6 +203,10 @@ class VPlotter:
         self.servo_pwm = GPIO.PWM(self.SERVO_PIN, self.SERVO_FREQUENCY)
         self.servo_pwm.start(0)
 
+        # Setup LED
+        self.led.__enter__()
+        self.set_led_idle()
+
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -200,6 +217,9 @@ class VPlotter:
         self.left_motor.__exit__(exc_type, exc_value, traceback)
         self.right_motor.__exit__(exc_type, exc_value, traceback)
 
+        # Cleanup LED
+        self.led.__exit__(exc_type, exc_value, traceback)
+
         GPIO.cleanup()
 
     def clear_canvas(self):
@@ -208,6 +228,28 @@ class VPlotter:
         self.canvas = (
             np.ones((self.canvas_height, self.canvas_width, 3), dtype=np.uint8) * 255
         )
+
+    def set_led_color(self, r, g, b):
+        """Set the LED color directly."""
+        self.led_color = (r, g, b)
+        self.led.set_color(r, g, b)
+
+    def set_led_idle(self):
+        """Set LED to idle color (dim blue)."""
+        self.set_led_color(*self.COLOR_IDLE)
+
+    def set_led_go_home(self):
+        """Set LED to red (going home)."""
+        self.set_led_color(*self.COLOR_GO_HOME)
+
+    def set_led_go_start(self):
+        """Set LED to green (going to start position)."""
+        self.set_led_color(*self.COLOR_GO_START)
+
+    def set_led_paint(self, width=0):
+        """Set LED color based on paint width (0=accent/idle color, 1=white)."""
+        color = interpolate_color(self.COLOR_IDLE, self.COLOR_PAINT_MAX, width)
+        self.set_led_color(*color)
 
     def update_canvas(self):
         current_x, current_y = self.get_current_coords()

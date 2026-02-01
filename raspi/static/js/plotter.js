@@ -82,8 +82,9 @@ function updateVisuals(data) {
     ctx.lineTo(px, py);
     ctx.stroke();
 
-    // Draw gondola
-    ctx.fillStyle = 'red';
+    // Draw gondola with LED color
+    const ledColor = data.led_color || [255, 0, 0];
+    ctx.fillStyle = `rgb(${ledColor[0]}, ${ledColor[1]}, ${ledColor[2]})`;
     ctx.beginPath();
     ctx.arc(px, py, 11, 0, Math.PI * 2);
     ctx.fill();

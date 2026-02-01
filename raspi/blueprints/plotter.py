@@ -67,6 +67,7 @@ def broadcast_status_snapshot():
             "current_job_id": curr_id,
             "current_job_name": curr_name,
             "is_working": working,
+            "led_color": plotter.led_color,
         }
 
         # Only encode canvas if someone is watching
