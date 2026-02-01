@@ -175,8 +175,8 @@ def run_workflow():
     workflows = {
         "kawaii": [
             {"stage": "rmbg"},
-            {"stage": "add_logo"},
-            {"stage": "slicer", "params": {"min_width": 1}},
+            # {"stage": "add_logo"},
+            # {"stage": "slicer", "params": {"min_width": 1}},
             {
                 "stage": "i2i",
                 "params": {
@@ -187,13 +187,13 @@ def run_workflow():
             },
             {"stage": "cleanup"},
             {"stage": "centerline"},
-            {"stage": "slicer", "params": {"scale": 0.8, "min_width": 1}},
+            {"stage": "slicer", "params": {"scale": 0.6, "min_width": 0.2, "taper_length_mm": 40}},
             {"stage": "visualizer"},
         ],
         "clean": [
             {"stage": "rmbg"},
-            {"stage": "add_logo"},
-            {"stage": "slicer", "params": {"min_width": 1}},
+            # {"stage": "add_logo"},
+            # {"stage": "slicer", "params": {"scale": 0.6, "min_width": 0.1}},
             {
                 "stage": "i2i",
                 "params": {
@@ -204,13 +204,13 @@ def run_workflow():
             },
             {"stage": "cleanup"},
             {"stage": "centerline"},
-            {"stage": "slicer", "params": {"scale": 0.8, "min_width": 1}},
+            {"stage": "slicer", "params": {"scale": 0.6, "min_width": 0.2, "taper_length_mm": 40}},
             {"stage": "visualizer"},
         ],
         "realistic": [
             {"stage": "rmbg"},
-            {"stage": "add_logo"},
-            {"stage": "slicer", "params": {"min_width": 1}},
+            # {"stage": "add_logo"},
+            # {"stage": "slicer", "params": {"min_width": 1}},
             {
                 "stage": "i2i",
                 "params": {
@@ -221,7 +221,7 @@ def run_workflow():
             },
             {"stage": "cleanup"},
             {"stage": "centerline"},
-            {"stage": "slicer", "params": {"scale": 0.8, "min_width": 1}},
+            {"stage": "slicer", "params": {"scale": 0.6, "min_width": 0.2, "taper_length_mm": 40}},
             {"stage": "visualizer"},
         ],
     }

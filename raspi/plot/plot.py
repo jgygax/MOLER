@@ -76,5 +76,5 @@ def plot_pattern(plotter, pattern, stop_event=None):
         plotter.pen_up()
 
         if home_distance and total_distance > home_distance:
-            execute_move_sequence(plotter, "dock", stop_event, speed_mulitplier=1.5)
+            execute_move_sequence(plotter, "dock", stop_event, speed_mulitplier=1)
             total_distance = 0
