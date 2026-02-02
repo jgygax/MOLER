@@ -119,8 +119,8 @@ class VPlotter:
         0: [23, 24, 25, 8],  # Left motor pins
         1: [5, 6, 13, 26],  # Right motor pins
     }
-    SPEED_UP = 0.06
-    SPEED_DOWN = 0.06
+    SPEED_UP = 0.07
+    SPEED_DOWN = 0.07
     MOTOR_DISTANCE = 400  # mm
     SERVO_PIN = 10
     SERVO_FREQUENCY = 50  # Standard servo frequency (50Hz)
@@ -132,8 +132,8 @@ class VPlotter:
     SPOOL_CIRCUMFERENCE = 125  # mm
     PIXELS_PER_MM = 1  # mm
     MAX_CIRCLE_DIAMETER = 1  # mm
-    X_OFFSET_AMOUNT = 2  # mm offset per 100mm vertical
-    Y_OFFSET_AMOUNT = 1  # mm offset
+    X_OFFSET_AMOUNT = 1  # mm offset per 100mm vertical
+    Y_OFFSET_AMOUNT = 0  # mm offset
     W_OFFSET_THRESHOLD = 0.1
 
     DOCK_POSITION = MOTOR_DISTANCE / 2, 80
@@ -387,8 +387,8 @@ class VPlotter:
             if w < 0.1:
                 w_mapped = 0
             else:
-                # w_mapped = 1
-                w_mapped = 0.6 * w + 0.4
+                w_mapped = 1
+                # w_mapped = 0.6 * w + 0.4
             duty_cycle = self.interpolate(
                 VPlotter.PEN_UP_DUTY, VPlotter.PEN_DOWN_DUTY, w_mapped
             )

@@ -187,7 +187,7 @@ def run_workflow():
             },
             {"stage": "cleanup"},
             {"stage": "centerline"},
-            {"stage": "slicer", "params": {"scale": 0.6, "min_width": 0.2, "taper_length_mm": 40}},
+            {"stage": "slicer", "params": {"scale": 0.6, "min_width": 1, "taper_length_mm": 40}},
             {"stage": "visualizer"},
         ],
         "clean": [
@@ -204,7 +204,7 @@ def run_workflow():
             },
             {"stage": "cleanup"},
             {"stage": "centerline"},
-            {"stage": "slicer", "params": {"scale": 0.6, "min_width": 0.2, "taper_length_mm": 40}},
+            {"stage": "slicer", "params": {"scale": 0.6, "min_width": 1, "taper_length_mm": 40}},
             {"stage": "visualizer"},
         ],
         "realistic": [
@@ -221,7 +221,7 @@ def run_workflow():
             },
             {"stage": "cleanup"},
             {"stage": "centerline"},
-            {"stage": "slicer", "params": {"scale": 0.6, "min_width": 0.2, "taper_length_mm": 40}},
+            {"stage": "slicer", "params": {"scale": 0.6, "min_width": 1, "taper_length_mm": 40}},
             {"stage": "visualizer"},
         ],
     }
