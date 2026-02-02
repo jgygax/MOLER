@@ -33,6 +33,5 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    depends_on:
-      - raspi
+    restart: unless-stopped
     command: gunicorn --worker-class gthread --threads 4 --bind 0.0.0.0:5002 app:app

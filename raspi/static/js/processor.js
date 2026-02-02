@@ -1,7 +1,7 @@
 let currentPage = 1;
 let isLoading = false;
 let hasMore = true;
-let knownArtifacts = new Map(); // jobId -> Set of slugs already sent to plotter
+
 let jobToImageMap = new Map(); // jobId -> imageId
 const socket = io();
 
@@ -12,7 +12,6 @@ const UPLOAD_BTN = document.getElementById('uploadBtn');
 let currentDetailsImageId = null;
 let scaledBlob = null;
 let cardStates = new Map(); // imageId -> current slide index
-let autoPlotJobs = new Set(); // jobIds that should auto-plot on completion
 
 // --- Initialization ---
 
@@ -25,6 +24,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     IMAGE_UPLOAD.addEventListener('change', handleFileSelect);
     UPLOAD_BTN.addEventListener('click', uploadAndProcess);
+
+    // Preference change handler - apply to all cards instantly
+    document.getElementById('preferenceSelect').addEventListener('change', () => {
+        // Clear cached states so cards will recalculate with new preference
+        document.querySelectorAll('.gallery-card').forEach(card => {
+            const imageId = card.dataset.id;
+            if (imageId && !imageId.startsWith('temp-')) {
+                cardStates.delete(imageId);
+                updateCardUI(imageId);
+            }
+        });
+    });
 
     // Infinite Scroll
     document.querySelector('.gallery-panel').addEventListener('scroll', (e) => {
@@ -171,12 +182,19 @@ async function uploadAndProcess() {
 
             // Check for auto-process
             const autoProcessToggle = document.getElementById('autoProcessToggle').checked;
-            const autoPlotToggle = document.getElementById('autoPlotToggle').checked;
 
             if (autoProcessToggle) {
-                const workflow = document.getElementById('autoWorkflowSelect').value;
-                // If auto-plot is on, we'll set it to auto-plot on completion
-                await runWorkflowFromCard(imageId, workflow, 10, autoPlotToggle);
+                // Process all styles in parallel
+                const styles = ['clean', 'realistic', 'kawaii', 'full'];
+                const jobs = await Promise.all(styles.map(style => runWorkflow(imageId, style, 10)));
+                // Register jobs and update UI
+                jobs.forEach((jobId, idx) => {
+                    if (jobId) {
+                        jobToImageMap.set(jobId, imageId);
+                    }
+                });
+                updateCardUI(imageId);
+                showToast('All styles queued for processing!', 'success');
             }
 
             // Reset UI
@@ -269,9 +287,10 @@ async function forwardToPlotter(jobId, slug, fileHash = null) {
 
 function getStyles(img) {
     const stylesConfig = [
-        { name: 'kawaii', label: 'Kawaii', icon: 'fa-magic' },
         { name: 'clean', label: 'Clean', icon: 'fa-broom' },
-        { name: 'realistic', label: 'Realistic', icon: 'fa-camera' }
+        { name: 'realistic', label: 'Realistic', icon: 'fa-camera' },
+        { name: 'kawaii', label: 'Cute', icon: 'fa-magic' },
+        { name: 'full', label: 'Full', icon: 'fa-image' }
     ];
 
     return stylesConfig.map(s => {
@@ -309,19 +328,23 @@ function createImageCard(img) {
 
     // Initial view selection logic:
     // 1. If we have a stored index, use it.
-    // 2. Otherwise, find the latest 'completed' or 'processing' style.
-    // 3. Fallback to the one selected for auto-process if matches, otherwise 0.
+    // 2. Find preferred style if available (ready/processing).
+    // 3. Otherwise, find the latest 'completed' or 'processing' style.
+    // 4. Fallback to first available.
     if (!cardStates.has(img.id)) {
         let bestIdx = 0;
-        const autoWorkflow = document.getElementById('autoWorkflowSelect').value;
-        const autoIdx = styles.findIndex(s => s.name === autoWorkflow);
+        const preference = document.getElementById('preferenceSelect').value;
+        const prefIdx = styles.findIndex(s => s.name === preference);
 
-        // Find first completed or processing
-        const priorityIdx = styles.findIndex(s => s.status === 'ready' || s.status === 'processing');
-        if (priorityIdx !== -1) {
-            bestIdx = priorityIdx;
-        } else if (autoIdx !== -1) {
-            bestIdx = autoIdx;
+        // Check if preferred style is available (ready or processing)
+        if (prefIdx !== -1 && (styles[prefIdx].status === 'ready' || styles[prefIdx].status === 'processing')) {
+            bestIdx = prefIdx;
+        } else {
+            // Find first completed or processing
+            const priorityIdx = styles.findIndex(s => s.status === 'ready' || s.status === 'processing');
+            if (priorityIdx !== -1) {
+                bestIdx = priorityIdx;
+            }
         }
         cardStates.set(img.id, bestIdx);
     }
@@ -463,7 +486,7 @@ async function handleProcessAction(event, imageId, style) {
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
 
-    await runWorkflowFromCard(imageId, style, 100, false); // Priority 100, no auto-plot
+    await runWorkflowFromCard(imageId, style, 100); // Priority 100
 }
 
 async function handlePlotAction(event, imageId, style) {
@@ -495,11 +518,10 @@ async function handlePlotAction(event, imageId, style) {
             showToast(`No slicer data found for ${style} version.`, 'error');
         }
     } else {
-        // If not processed, process with priority 200 and auto-plot
-        showToast(`Queueing ${style} (priority 200) and auto-plot...`);
-        await runWorkflowFromCard(imageId, style, 200, true);
+        showToast(`${style} is not ready yet. Process it first.`, 'error');
     }
-    // The card will be updated by handleStatusUpdate or runWorkflowFromCard
+    // The card will be updated by handleStatusUpdate
+    updateCardUI(imageId);
 }
 
 // --- Workflow Operations ---
@@ -529,11 +551,10 @@ async function runWorkflow(imageId, workflowName, priority = 100) {
     }
 }
 
-async function runWorkflowFromCard(imageId, style, priority = 100, andPlot = false) {
+async function runWorkflowFromCard(imageId, style, priority = 100) {
     const jobId = await runWorkflow(imageId, style, priority);
     if (jobId) {
-        if (andPlot) autoPlotJobs.add(jobId);
-        showToast(`${style} queued (priority ${priority}). ${andPlot ? 'Will plot automatically.' : ''}`, 'success');
+        showToast(`${style} queued (priority ${priority}).`, 'success');
         updateCardUI(imageId); // Refresh the card to show processing status
     } else {
         showToast(`Failed to queue ${style} processing.`, 'error');
@@ -545,7 +566,7 @@ async function runWorkflowFromCard(imageId, style, priority = 100, andPlot = fal
 
 async function handleStatusUpdate(jobs) {
     for (const job of jobs) {
-        const { job_id, status, artifacts, current_stage, error } = job;
+        const { job_id, status, error } = job;
 
         // Toast on error
         if (status === 'failed') {
@@ -555,30 +576,6 @@ async function handleStatusUpdate(jobs) {
         const imageId = jobToImageMap.get(job_id);
         if (imageId) {
             updateCardUI(imageId);
-
-            if (status === 'completed' || status === 'running') {
-                // Real-time auto-plot for NEW slicer artifacts
-                if (autoPlotJobs.has(job_id)) {
-                    const known = knownArtifacts.get(job_id) || new Set();
-                    const newSlicers = (artifacts || [])
-                        .filter(a => a.slug.startsWith('slicer') && !known.has(a.hash || a.slug))
-                        .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-
-                    if (newSlicers.length > 0) {
-                        for (const s of newSlicers) {
-                            await forwardToPlotter(job_id, s.slug, s.hash);
-                            known.add(s.hash || s.slug);
-                        }
-                        knownArtifacts.set(job_id, known);
-                        showToast(`Enqueued ${newSlicers.length} new slicer result(s).`, 'success');
-                    }
-
-                    if (status === 'completed') {
-                        autoPlotJobs.delete(job_id);
-                        knownArtifacts.delete(job_id);
-                    }
-                }
-            }
         }
     }
 }

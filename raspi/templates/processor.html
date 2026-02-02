@@ -129,6 +129,32 @@
         margin-bottom: 20px;
     }
 
+    .controls-panel {
+        flex: 0 0 320px;
+        display: flex;
+        flex-direction: column;
+        background: #0a0a0a;
+        overflow-y: auto;
+    }
+
+    .preference-bar {
+        background: #1a1a1a;
+        padding: 10px 15px;
+        border-radius: 6px;
+        border: 1px solid #333;
+        margin: 15px 15px 0 15px;
+    }
+
+    .controls-panel .upload-panel {
+        flex: 1;
+        background: #0a0a0a;
+        padding: 15px;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        min-height: 0;
+    }
+
     .toggle-switch {
         position: relative;
         display: inline-block;
@@ -178,49 +204,44 @@
 
 {% block content %}
 <div class="processor-container">
-    <div class="upload-panel">
-        <h2>Process Image</h2>
-
-        <label for="imageUpload" class="custom-file-upload">
-            <div id="preview-box">
-                <i class="fas fa-cloud-upload-alt"></i>
-                <span>Upload Image</span>
-            </div>
-            <input type="file" id="imageUpload" accept="image/*" style="display: none;">
-        </label>
-
-        <div class="auto-process-bar">
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="autoProcessToggle" checked>
-                        <span class="slider"></span>
-                    </label>
-                    <span style="font-size: 0.8rem;">Auto-Process</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="autoPlotToggle">
-                        <span class="slider"></span>
-                    </label>
-                    <span style="font-size: 0.8rem;">Auto-Plot</span>
-                </div>
-            </div>
-            <select id="autoWorkflowSelect" style="flex: 1; padding: 8px; font-size: 0.8rem; background: #222; border: 1px solid #444; color: #fff; border-radius: 4px;">
-                <option value="kawaii">Kawaii (Chibi)</option>
-                <option value="clean">Clean (Vector)</option>
-                <option value="realistic">Realistic (Pop Art)</option>
+    <div class="controls-panel">
+        <div class="preference-bar">
+            <select id="preferenceSelect" style="width: 100%; padding: 8px; font-size: 0.8rem; background: #222; border: 1px solid #444; color: #fff; border-radius: 4px;">
+                <option value="clean">Clean</option>
+                <option value="realistic">Realistic</option>
+                <option value="kawaii">Cute</option>
+                <option value="full">Full</option>
             </select>
         </div>
 
-        <div class="form-group">
-            <button id="uploadBtn" class="primary action-btn" disabled>
-                <i class="fas fa-magic"></i> Upload & Process
-            </button>
-        </div>
+        <div class="upload-panel">
+            <h2>Process Image</h2>
 
-        <div style="margin-top: auto; padding-top: 20px; color: #555; font-size: 0.75rem;">
-            <p><i class="fas fa-info-circle"></i> Images are scaled to max 1024px before upload.</p>
+            <label for="imageUpload" class="custom-file-upload">
+                <div id="preview-box">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <span>Upload Image</span>
+                </div>
+                <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+            </label>
+
+            <div class="auto-process-bar">
+                <div style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="autoProcessToggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span style="font-size: 0.8rem;">Auto Process</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <button id="uploadBtn" class="primary action-btn" disabled>
+                    <i class="fas fa-magic"></i> Upload
+                </button>
+            </div>
         </div>
     </div>
 

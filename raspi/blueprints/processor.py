@@ -173,6 +173,24 @@ def run_workflow():
 
     # Define workflows
     workflows = {
+        "clean": [
+            {"stage": "rmbg"},
+            # {"stage": "add_logo"},
+            # {"stage": "slicer", "params": {"scale": 0.85, "min_width": 0.1}},
+            {
+                "stage": "i2i",
+                "params": {
+                    "prompt": "Simple flat illustration like a basic infographic icon or emoji style. Thick black outlines, solid flat colors, white background. Minimal details. No textures, no gradients, no fine details.",
+                },
+            },
+            {"stage": "cleanup"},
+            {"stage": "centerline"},
+            {
+                "stage": "slicer",
+                "params": {"scale": 0.85, "min_width": 1, "taper_length_mm": 40},
+            },
+            {"stage": "visualizer"},
+        ],
         "kawaii": [
             {"stage": "rmbg"},
             # {"stage": "add_logo"},
@@ -180,31 +198,15 @@ def run_workflow():
             {
                 "stage": "i2i",
                 "params": {
-                    "prompt": "Transform into Q版风格 — chibi style, extremely simplified features, with flat colors, thick black lines and white background.",
-                    "target_size": 1024,
-                    "content_size": 512,
+                    "prompt": "Stylize as adorable chibi Q版 with exaggerated proportions, shortened cute features, soft forms, thick smooth outlines, minimal complexity, flat colors, white background.",
                 },
             },
             {"stage": "cleanup"},
             {"stage": "centerline"},
-            {"stage": "slicer", "params": {"scale": 0.6, "min_width": 1, "taper_length_mm": 40}},
-            {"stage": "visualizer"},
-        ],
-        "clean": [
-            {"stage": "rmbg"},
-            # {"stage": "add_logo"},
-            # {"stage": "slicer", "params": {"scale": 0.6, "min_width": 0.1}},
             {
-                "stage": "i2i",
-                "params": {
-                    "prompt": "Convert into a vector art svg with flat colors and simple thick black lines, white background, minimalist.",
-                    "target_size": 1024,
-                    "content_size": 512,
-                },
+                "stage": "slicer",
+                "params": {"scale": 0.85, "min_width": 1, "taper_length_mm": 40},
             },
-            {"stage": "cleanup"},
-            {"stage": "centerline"},
-            {"stage": "slicer", "params": {"scale": 0.6, "min_width": 1, "taper_length_mm": 40}},
             {"stage": "visualizer"},
         ],
         "realistic": [
@@ -214,14 +216,33 @@ def run_workflow():
             {
                 "stage": "i2i",
                 "params": {
-                    "prompt": "Transform into comic book pop art style — bold black outlines, flat color zones, no gradients, white background.",
-                    "target_size": 1024,
-                    "content_size": 512,
+                    "prompt": "Realistic proportions with thick black outlines and flat solid colors only. Absolutely no hatching, no line shading, no texture details, no fine lines inside shapes. Just bold contours and solid color fills. White background. Clean and simple like a coloring book with colors filled in.",
                 },
             },
             {"stage": "cleanup"},
             {"stage": "centerline"},
-            {"stage": "slicer", "params": {"scale": 0.6, "min_width": 1, "taper_length_mm": 40}},
+            {
+                "stage": "slicer",
+                "params": {"scale": 0.85, "min_width": 1, "taper_length_mm": 40},
+            },
+            {"stage": "visualizer"},
+        ],
+        "full": [
+            # {"stage": "rmbg"},
+            # {"stage": "add_logo"},
+            # {"stage": "slicer", "params": {"min_width": 1}},
+            {
+                "stage": "i2i",
+                "params": {
+                    "prompt": "Realistic proportions with thick black outlines and flat solid colors only. Absolutely no hatching, no line shading, no texture details, no fine lines inside shapes. Just bold contours and solid color fills. Clean and simple like a coloring book with colors filled in.",
+                },
+            },
+            {"stage": "cleanup"},
+            {"stage": "centerline"},
+            {
+                "stage": "slicer",
+                "params": {"scale": 0.85, "min_width": 1, "taper_length_mm": 40},
+            },
             {"stage": "visualizer"},
         ],
     }
@@ -346,7 +367,11 @@ def get_status():
                     else:
                         # No cache, return as unknown
                         results.append(
-                            {"job_id": job_id, "status": "unknown", "error": "backend unreachable"}
+                            {
+                                "job_id": job_id,
+                                "status": "unknown",
+                                "error": "backend unreachable",
+                            }
                         )
         except Exception as e:
             logger.error(f"Status check error: {e}")
@@ -358,7 +383,11 @@ def get_status():
                 else:
                     # No cache, return as unknown
                     results.append(
-                        {"job_id": job_id, "status": "unknown", "error": "backend unreachable"}
+                        {
+                            "job_id": job_id,
+                            "status": "unknown",
+                            "error": "backend unreachable",
+                        }
                     )
 
     return jsonify(results)
@@ -416,10 +445,10 @@ def _get_artifact_path_by_slug(job_id, slug):
     for path in Path(local_dir).glob(f"{slug}*"):
         if path.is_file():
             return str(path)
-    
+
     # Special handling for slicer: scan for any yaml files if exact slug not found
-    if slug.startswith('slicer'):
-        yaml_files = list(Path(local_dir).glob('*.yaml'))
+    if slug.startswith("slicer"):
+        yaml_files = list(Path(local_dir).glob("*.yaml"))
         if yaml_files:
             # Return the first yaml file found (or could sort by timestamp)
             return str(yaml_files[0])

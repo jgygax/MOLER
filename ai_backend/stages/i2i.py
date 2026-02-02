@@ -18,7 +18,7 @@ class I2IStage(BaseStage):
         self.valid_input_slugs = ["original", "rmbg"]
 
         # Configuration
-        self.workflow_path = os.path.join(os.getcwd(), "workflows", "i2i.json")
+        self.workflow_path = os.path.join(os.getcwd(), "workflows", "flux2.json")
         self.comfy_url = os.getenv("COMFY_URL", "http://host.docker.internal:8188")
         self.client = ComfyUIClient(self.comfy_url)
 
@@ -30,17 +30,17 @@ class I2IStage(BaseStage):
         target_size = int(
             params.get("target_size", 1024)
         )  # The size of the canvas/latent
+        megapixels = float(params.get("megapixels", 0.5))
+
         content_size = int(
             params.get("content_size", 1024)
         )  # The size of the subject within that canvas
         user_prompt = params.get("prompt", "")
-        negative_prompt = params.get("negative_prompt", "")
+
         if params.get("seed") == "random":
             seed = random.randint(1, 10000000000)
         else:
             seed = int(params.get("seed", 42))
-        denoise = float(params.get("denoise", 1.0))
-        steps = int(params.get("steps", 4))
 
         logger.info(
             f"Preparing I2I: Target={target_size}, Content={content_size}, Seed={seed}"
@@ -84,43 +84,27 @@ class I2IStage(BaseStage):
         with open(self.workflow_path, "r") as f:
             workflow = json.load(f)
 
-        # Node IDs identified from your workflows/i2i.json:
-        # 3: KSampler (seed, steps, denoise)
-        # 78: LoadImage (image file)
-        # 101: Positive Prompt (TextEncodeQwenImageEditPlus)
-        # 102: Negative Prompt
-        # 107: EmptySD3LatentImage (width, height)
-        # 60: SaveImage (Output)
+        workflow["76"]["inputs"]["image"] = temp_input_filename
 
-        # -- Set Latent Size (Node 107) --
-        if "107" in workflow:
-            workflow["107"]["inputs"]["width"] = content_size
-            workflow["107"]["inputs"]["height"] = content_size
+        workflow["107"]["inputs"]["megapixels"] = megapixels
 
-        # -- Set Input Image (Node 78) --
-        if "78" in workflow:
-            workflow["78"]["inputs"]["image"] = temp_input_filename
+        # workflow["107"]["inputs"]["width"] = content_size
+        # workflow["107"]["inputs"]["height"] = content_size
 
-        # -- Set Sampler Params (Node 3) --
-        if "3" in workflow:
-            workflow["3"]["inputs"]["seed"] = seed
-            workflow["3"]["inputs"]["denoise"] = denoise
-            workflow["3"]["inputs"]["steps"] = steps
+        workflow["102"]["inputs"]["noise_seed"] = seed
 
-        # -- Set Prompts (Node 101 & 102) --
+        # workflow["3"]["inputs"]["denoise"] = denoise
+        # workflow["3"]["inputs"]["steps"] = steps
+
         # Default style prompt from your JSON
         default_style = "Transform into Q版风格 — chibi style, extremely simplified features, with flat colors, thick black lines and white background."
 
-        if "101" in workflow:
-            # If user provided a prompt, we can choose to replace it or append it.
-            # Here, if user provides a prompt, we assume they want to control it,
-            # otherwise we fall back to the default style.
-            # Alternatively, you could do: f"{user_prompt}, {default_style}"
-            final_prompt = user_prompt if user_prompt else default_style
-            workflow["101"]["inputs"]["prompt"] = final_prompt
-
-        if "102" in workflow and negative_prompt:
-            workflow["102"]["inputs"]["prompt"] = negative_prompt
+        # If user provided a prompt, we can choose to replace it or append it.
+        # Here, if user provides a prompt, we assume they want to control it,
+        # otherwise we fall back to the default style.
+        # Alternatively, you could do: f"{user_prompt}, {default_style}"
+        final_prompt = user_prompt if user_prompt else default_style
+        workflow["110"]["inputs"]["text"] = final_prompt
 
         # 5. Execute Workflow
         logger.info("Queuing workflow to ComfyUI...")
@@ -136,11 +120,7 @@ class I2IStage(BaseStage):
             # 6. Retrieve Result
             node_outputs = history["outputs"]
 
-            # Find output for Node 60 (SaveImage)
-            if "60" not in node_outputs:
-                raise RuntimeError("Workflow did not output an image on Node 60")
-
-            image_outputs = node_outputs["60"]["images"]
+            image_outputs = node_outputs["9"]["images"]
             if not image_outputs:
                 raise RuntimeError("No images generated.")
 
