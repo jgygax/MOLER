@@ -185,8 +185,15 @@ async function uploadAndProcess() {
 
             if (autoProcessToggle) {
                 // Process all styles in parallel
-                const styles = ['clean', 'realistic', 'kawaii', 'full'];
-                const jobs = await Promise.all(styles.map(style => runWorkflow(imageId, style, 10)));
+                // Process all styles in parallel with different priorities
+                const styles = [
+                    { name: 'clean', priority: 13 },
+                    { name: 'realistic', priority: 12 },
+                    { name: 'kawaii', priority: 11 },
+                    { name: 'full', priority: 10 }
+                ];
+                const jobs = await Promise.all(styles.map(style => runWorkflow(imageId, style.name, style.priority)));
+
                 // Register jobs and update UI
                 jobs.forEach((jobId, idx) => {
                     if (jobId) {

@@ -13,3 +13,6 @@ is_processing_job = False
 
 # Configuration
 CANVAS_BOUNDS = {"top": 10, "left": 30, "right": 10, "bottom": 30}
+
+# VPlotter Settings Storage
+vplotter_settings = None

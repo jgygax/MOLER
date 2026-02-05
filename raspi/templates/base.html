@@ -18,6 +18,8 @@
             <a href="{{ url_for('plotter.index') }}"
                 class="{{ 'active' if request.endpoint and 'plotter' in request.endpoint }}">Plotter</a>
             <a href="/processor" class="">AI Lab</a>
+            <a href="{{ url_for('settings.index') }}"
+                class="{{ 'active' if request.endpoint and 'settings' in request.endpoint }}">Settings</a>
         </div>
     </div>
 

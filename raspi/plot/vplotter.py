@@ -118,7 +118,7 @@ class VPlotter:
     MOTOR_PINS = {
         0: [23, 24, 25, 8],  # Left motor pins
         1: [5, 6, 13, 26],  # Right motor pins
-    }
+    }   
     SPEED_UP = 0.07
     SPEED_DOWN = 0.07
     MOTOR_DISTANCE = 400  # mm
@@ -144,6 +144,10 @@ class VPlotter:
     COLOR_PAINT_MAX = (255, 255, 255)  # Pure white at width=1
     COLOR_GO_HOME = (255, 0, 0)  # Red when going home
     COLOR_GO_START = (0, 255, 0)  # Green when going to start
+
+    # Width mapping configuration
+    START_W = 0.4  # Base width when w=0
+    WIDTH_VARIATION = 0.6  # How much width varies with w
 
     def __init__(self):
         self.x, self.y = self.DOCK_POSITION
@@ -385,10 +389,9 @@ class VPlotter:
 
             # Update servo
             if w < 0.1:
-                w_mapped = 0
+                w_mapped = max(0, VPlotter.START_W - 0.1)
             else:
-                w_mapped = 1
-                # w_mapped = 0.6 * w + 0.4
+                w_mapped = VPlotter.START_W + (1 - VPlotter.START_W) * w * VPlotter.WIDTH_VARIATION
             duty_cycle = self.interpolate(
                 VPlotter.PEN_UP_DUTY, VPlotter.PEN_DOWN_DUTY, w_mapped
             )

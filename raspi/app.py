@@ -13,6 +13,10 @@ from blueprints.processor import (
     processor_bp,
     start_background_threads as start_processor_threads,
 )
+from blueprints.settings import (
+    settings_bp,
+    apply_settings_to_plotter,
+)
 
 load_dotenv()
 
@@ -35,6 +39,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 app.register_blueprint(plotter_bp)
 app.register_blueprint(processor_bp)
+app.register_blueprint(settings_bp)
 
 @app.route("/")
 def home():
@@ -47,6 +52,8 @@ if not extensions.plotter_instance:
         extensions.plotter_instance = VPlotter()
         extensions.plotter_instance.__enter__()
         extensions.is_processing_job = False # Ensure state
+        # Apply default settings to the plotter
+        apply_settings_to_plotter()
     except Exception as e:
         logger.error(f"Could not initialize VPlotter: {e}")
         extensions.plotter_instance = None
@@ -58,5 +65,4 @@ start_processor_threads(socketio)
 
 if __name__ == "__main__":
     logger.info("Starting Plotter Web Server...")
-    socketio.run(app, host="0.0.0.0", port=5001)
-
+    socketio.run(app, host="0.0.0.0", port=5001, allow_unsafe_werkzeug=True)
