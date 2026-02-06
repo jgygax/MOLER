@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/huid.css') }}">
+<style>
+    /* Hide the default nav bar */
+    .nav-bar {
+        display: none !important;
+    }
+    .main-content {
+        padding: 0 !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="huid-wrapper">
+    <div id="huid-container">
+        <!-- Camera always visible in background - full screen -->
+        <video id="camera-video" autoplay playsinline></video>
+        <canvas id="capture-canvas"></canvas>
+        
+        <!-- Overlay for timeline/gallery images -->
+        <img id="overlay-image" src="" alt="Overlay">
+        
+        <!-- UI Container - constrained by Y boundaries -->
+        <div id="ui-container">
+            <!-- Top Bar - Mode Selection -->
+            <div id="top-bar">
+                <button class="mode-btn" id="mode-camera" data-mode="camera">Camera</button>
+                <button class="mode-btn" id="mode-timeline" data-mode="timeline">Timeline</button>
+                <button class="mode-btn" id="mode-gallery" data-mode="gallery">Gallery</button>
+                <button class="mode-btn" id="mode-settings" data-mode="settings">Settings</button>
+                <button class="mode-btn" id="mode-lock" data-mode="lock">Lock</button>
+            </div>
+            
+            <!-- Status Overlay - positioned below top bar -->
+            <div class="status-overlay" id="status-text"></div>
+            
+            <!-- Timeline Progress Bar -->
+            <div class="timeline-bar" id="timeline-bar">
+                <div class="timeline-progress" id="timeline-progress"></div>
+            </div>
+            
+            <!-- Bottom Bar - Context Controls (populated by JS) -->
+            <div id="bottom-bar"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/huid.js') }}"></script>
+{% endblock %}

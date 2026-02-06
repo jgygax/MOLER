@@ -17,6 +17,10 @@ from blueprints.settings import (
     settings_bp,
     apply_settings_to_plotter,
 )
+from blueprints.huid import (
+    huid_bp,
+    start_background_threads as start_huid_threads,
+)
 
 load_dotenv()
 
@@ -40,6 +44,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 app.register_blueprint(plotter_bp)
 app.register_blueprint(processor_bp)
 app.register_blueprint(settings_bp)
+app.register_blueprint(huid_bp)
 
 @app.route("/")
 def home():
@@ -61,6 +66,7 @@ if not extensions.plotter_instance:
 # Ensure threads are started
 start_plotter_threads(socketio)
 start_processor_threads(socketio)
+start_huid_threads(socketio)
 
 
 if __name__ == "__main__":

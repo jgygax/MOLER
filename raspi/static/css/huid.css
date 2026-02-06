@@ -1,0 +1,288 @@
+/* HUID - Minimal Transparent HUD Design */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+body {
+    background: #000;
+    overflow: hidden;
+    touch-action: none;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Wrapper takes full screen */
+#huid-wrapper {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+    z-index: 9999;
+}
+
+/* Main container */
+#huid-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* Camera always in background - full screen, NOT clipped */
+#camera-video {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    min-width: 100%;
+    min-height: 100%;
+    width: auto;
+    height: auto;
+    transform: translate(-50%, -50%) scale(1);
+    transform-origin: center center;
+    object-fit: cover;
+    z-index: 1;
+}
+
+#capture-canvas {
+    display: none;
+}
+
+/* Overlay for timeline/gallery images - centered */
+#overlay-image {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 70%;
+    max-height: 60%;
+    object-fit: contain;
+    z-index: 5;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+}
+
+/* UI Container - ALL UI elements go here and are clipped by Y boundaries */
+#ui-container {
+    position: absolute;
+    top: var(--y-start, 10%);
+    left: 0;
+    width: 100%;
+    height: calc(var(--y-end, 90%) - var(--y-start, 10%));
+    z-index: 10;
+    pointer-events: none; /* Let clicks pass through to camera where no UI */
+    overflow: hidden; /* Clip everything inside */
+}
+
+#ui-container > * {
+    pointer-events: auto; /* Re-enable clicks on UI elements */
+}
+
+/* Top Bar - Mode Selection - at top of UI container */
+#top-bar {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 6px 12px;
+    border-radius: 20px;
+    backdrop-filter: blur(4px);
+}
+
+.mode-btn {
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: all 0.15s ease;
+    font-family: system-ui, -apple-system, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.mode-btn:hover {
+    border-color: rgba(255, 255, 255, 0.4);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+/* Blue = Hovering (navigating to) */
+.mode-btn.blue {
+    border-color: rgba(0, 200, 255, 0.8);
+    box-shadow: 0 0 10px rgba(0, 200, 255, 0.8), 0 0 20px rgba(0, 200, 255, 0.4);
+    color: rgba(200, 240, 255, 1);
+}
+
+/* Green = Selected/Active mode */
+.mode-btn.green {
+    border-color: rgba(0, 255, 100, 0.8);
+    color: rgba(200, 255, 220, 1);
+    background: rgba(0, 255, 100, 0.1);
+}
+
+/* Green + glow when selected AND hovered */
+.mode-btn.green.blue {
+    border-color: rgba(0, 255, 100, 0.8);
+    box-shadow: 0 0 10px rgba(0, 255, 100, 0.8), 0 0 20px rgba(0, 255, 100, 0.4);
+    color: rgba(200, 255, 220, 1);
+}
+
+/* Bottom Bar - Context Controls - at bottom of UI container */
+#bottom-bar {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 6px 12px;
+    border-radius: 20px;
+    backdrop-filter: blur(4px);
+}
+
+.control-btn {
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 10px;
+    transition: all 0.15s ease;
+    font-family: system-ui, -apple-system, sans-serif;
+    white-space: nowrap;
+}
+
+.control-btn:hover {
+    border-color: rgba(255, 255, 255, 0.4);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+/* Blue = Hovering (navigating to) */
+.control-btn.blue {
+    border-color: rgba(0, 200, 255, 0.8);
+    box-shadow: 0 0 10px rgba(0, 200, 255, 0.8), 0 0 20px rgba(0, 200, 255, 0.4);
+    color: rgba(200, 240, 255, 1);
+}
+
+/* Green = Selected/Active control */
+.control-btn.green {
+    border-color: rgba(0, 255, 100, 0.8);
+    color: rgba(200, 255, 220, 1);
+    background: rgba(0, 255, 100, 0.1);
+}
+
+/* Green + glow when selected AND hovered */
+.control-btn.green.blue {
+    border-color: rgba(0, 255, 100, 0.8);
+    box-shadow: 0 0 10px rgba(0, 255, 100, 0.8), 0 0 20px rgba(0, 255, 100, 0.4);
+    color: rgba(200, 255, 220, 1);
+}
+
+/* Yellow/Gold = Options/Selectors */
+.control-btn.yellow {
+    border-color: rgba(255, 204, 0, 0.8);
+    box-shadow: 0 0 10px rgba(255, 204, 0, 0.8), 0 0 20px rgba(255, 204, 0, 0.4);
+    color: rgba(255, 240, 200, 1);
+}
+
+/* Red/Coral = Actions */
+.control-btn.red {
+    border-color: rgba(255, 85, 85, 0.8);
+    box-shadow: 0 0 10px rgba(255, 85, 85, 0.8), 0 0 20px rgba(255, 85, 85, 0.4);
+    color: rgba(255, 220, 220, 1);
+}
+
+/* Status text overlay - below top bar */
+.status-overlay {
+    position: absolute;
+    top: 60px; /* Below top bar */
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 14px;
+    font-weight: 500;
+    font-family: system-ui, -apple-system, sans-serif;
+    z-index: 10;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 8px 16px;
+    border-radius: 12px;
+    pointer-events: none;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Timeline progress bar - above bottom bar */
+.timeline-bar {
+    position: absolute;
+    bottom: 60px; /* Above bottom bar */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    display: none;
+}
+
+.timeline-bar.visible {
+    display: block;
+}
+
+.timeline-progress {
+    height: 100%;
+    background: rgba(0, 255, 100, 0.8);
+    border-radius: 2px;
+    transition: width 0.1s ease;
+}
+
+/* Lock mode - disabled state */
+.locked #ui-container {
+    opacity: 0.3;
+    pointer-events: none;
+}
+
+/* Lock mode - video stays in color for HUD visibility */
+
+/* Hide scrollbars */
+::-webkit-scrollbar {
+    display: none;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .mode-btn {
+        padding: 6px 12px;
+        font-size: 11px;
+    }
+    
+    .control-btn {
+        padding: 6px 12px;
+        font-size: 11px;
+    }
+    
+    #top-bar, #bottom-bar {
+        padding: 4px 8px;
+        gap: 6px;
+    }
+    
+    .status-overlay {
+        font-size: 12px;
+        padding: 6px 12px;
+        top: 55px;
+    }
+}

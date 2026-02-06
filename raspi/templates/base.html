@@ -20,6 +20,8 @@
             <a href="/processor" class="">AI Lab</a>
             <a href="{{ url_for('settings.index') }}"
                 class="{{ 'active' if request.endpoint and 'settings' in request.endpoint }}">Settings</a>
+            <a href="{{ url_for('huid.index') }}"
+                class="{{ 'active' if request.endpoint and 'huid' in request.endpoint }}">HUID VR</a>
         </div>
     </div>
 
