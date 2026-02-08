@@ -30,6 +30,13 @@
         currentWorkflowIndex: 0,
         workflows: ['clean', 'realistic', 'kawaii', 'full'],
         autoGallery: false,
+        audioEnabled: false,
+        audioVoice: 'dalek',
+        audioSocket: null,
+        audioStream: null,
+        audioContext: null,
+        audioWorklet: null,
+        audioRecording: false,
         isFullscreen: false,
         settings: { yStart: 10, yEnd: 90 },
         db: null,
@@ -47,7 +54,7 @@
     const MAX_DB_FRAMES = 1000;
     const FETCH_TIMEOUT = 15000;
 
-    const OPTION_CONTROLS = ['scroll-workflows', 'switch-camera', 'zoom', 'pan-x', 'pan-y', 'y-start', 'y-end', 'auto-gallery'];
+    const OPTION_CONTROLS = ['scroll-workflows', 'switch-camera', 'zoom', 'pan-x', 'pan-y', 'y-start', 'y-end', 'auto-gallery', 'audio-toggle', 'audio-voice'];
     const ACTION_CONTROLS = ['process', 'send-plotter', 'fullscreen', 'scroll-timeline', 'scroll-images'];
 
     document.addEventListener('DOMContentLoaded', init);
@@ -63,6 +70,7 @@
         setupEventListeners();
         startFrameCapture();
         updateUI();
+        maybeStartAudio();
     }
 
     function cacheElements() {
@@ -81,6 +89,7 @@
             camera: document.getElementById('mode-camera'),
             timeline: document.getElementById('mode-timeline'),
             gallery: document.getElementById('mode-gallery'),
+            audio: document.getElementById('mode-audio'),
             settings: document.getElementById('mode-settings'),
             lock: document.getElementById('mode-lock')
         };
@@ -137,6 +146,8 @@
             state.currentCameraIndex = parsed.currentCameraIndex || 0;
             state.autoGallery = parsed.autoGallery || false;
             state.currentWorkflowIndex = parsed.currentWorkflowIndex || 0;
+            state.audioEnabled = parsed.audioEnabled || false;
+            state.audioVoice = parsed.audioVoice || 'dalek';
         }
     }
 
@@ -145,7 +156,9 @@
             settings: state.settings,
             currentCameraIndex: state.currentCameraIndex,
             autoGallery: state.autoGallery,
-            currentWorkflowIndex: state.currentWorkflowIndex
+            currentWorkflowIndex: state.currentWorkflowIndex,
+            audioEnabled: state.audioEnabled,
+            audioVoice: state.audioVoice
         };
         localStorage.setItem('huid_settings', JSON.stringify(toSave));
     }
@@ -319,7 +332,7 @@
 
     function getNavigableElements() {
         if (state.isLocked) return [];
-        return ['camera', 'timeline', 'gallery', 'settings', 'lock', ...getCurrentControls()];
+        return ['camera', 'timeline', 'gallery', 'audio', 'settings', 'lock', ...getCurrentControls()];
     }
 
     function getCurrentControls() {
@@ -328,6 +341,7 @@
             case 'camera': return ['zoom', 'pan-x', 'pan-y', 'switch-camera'];
             case 'timeline': return ['scroll-timeline', 'process', 'auto-gallery'];
             case 'gallery': return ['scroll-images', 'scroll-workflows', 'send-plotter'];
+            case 'audio': return ['audio-toggle', 'audio-voice'];
             case 'settings': return ['y-start', 'y-end', 'fullscreen'];
             default: return [];
         }
@@ -421,7 +435,7 @@
         const el = state.hoveredElement;
         if (!el) return;
         
-        if (['camera', 'timeline', 'gallery', 'settings', 'lock'].includes(el)) {
+        if (['camera', 'timeline', 'gallery', 'audio', 'settings', 'lock'].includes(el)) {
             if (state.activeControl) state.activeControl = null;
             
             if (el === 'lock') {
@@ -519,6 +533,24 @@
                 state.settings.yEnd = Math.max(20, Math.min(100, state.settings.yEnd + delta));
                 saveSettings(); 
                 applyYConstraints(); 
+                break;
+            case 'audio-toggle':
+                state.audioEnabled = !state.audioEnabled;
+                saveSettings();
+                if (state.audioEnabled) {
+                    startAudioStream();
+                } else {
+                    stopAudioStream();
+                }
+                break;
+            case 'audio-voice':
+                const voices = ['dalek', 'walle', 'evil'];
+                const currentIndex = voices.indexOf(state.audioVoice);
+                state.audioVoice = voices[(currentIndex + 1) % voices.length];
+                saveSettings();
+                if (state.audioRecording) {
+                    changeAudioVoice(state.audioVoice);
+                }
                 break;
         }
         updateUI();
@@ -625,6 +657,8 @@
         
         const workflow = state.workflows[state.currentWorkflowIndex];
         const cacheKey = `${img.id}-${workflow}`;
+        const timeAgo = img.timestamp ? formatTimeAgo(img.timestamp) : '';
+        const statusPrefix = timeAgo ? `[${timeAgo}] ` : '';
         
         // Show fallback immediately (thumbnail/original in B&W)
         elements.overlay.style.display = 'block';
@@ -635,30 +669,30 @@
         if (img.isTemp) {
             const wfData = img.workflows?.find(w => w.name === workflow);
             if (img.uploadStatus === 'uploading') {
-                updateStatus('Uploading...');
+                updateStatus(`${statusPrefix}Uploading...`);
             } else if (img.uploadStatus === 'failed') {
-                updateStatus('Upload failed');
+                updateStatus(`${statusPrefix}Upload failed`);
                 elements.overlay.style.filter = 'grayscale(1) brightness(0.4)';
             } else if (wfData) {
                 if (wfData.status === 'pending') {
-                    updateStatus(`${workflow}: Waiting...`);
+                    updateStatus(`${statusPrefix}${workflow}: Waiting...`);
                 } else if (wfData.status === 'starting') {
-                    updateStatus(`${workflow}: Starting...`);
+                    updateStatus(`${statusPrefix}${workflow}: Starting...`);
                 } else if (wfData.status === 'processing') {
-                    updateStatus(`${workflow}: Processing...`);
+                    updateStatus(`${statusPrefix}${workflow}: Processing...`);
                 } else if (wfData.status === 'failed' || wfData.status === 'error') {
-                    updateStatus(`${workflow}: Failed`);
+                    updateStatus(`${statusPrefix}${workflow}: Failed`);
                     elements.overlay.style.filter = 'grayscale(1) brightness(0.4)';
                 } else if (wfData.status === 'completed' && wfData.job_id) {
                     elements.overlay.src = `/processor/artifact/${wfData.job_id}/visualizer`;
                     elements.overlay.style.filter = 'none';
-                    updateStatus(`${workflow}: Ready`);
+                    updateStatus(`${statusPrefix}${workflow}: Ready`);
                 }
             }
             return;
         }
         
-        updateStatus(`${workflow}: Loading...`);
+        updateStatus(`${statusPrefix}${workflow}: Loading...`);
         
         // Check cache first - if cached and ready, show immediately
         if (state.workflowCache.has(cacheKey)) {
@@ -666,7 +700,7 @@
             if (cached.status === 'ready' && cached.url) {
                 elements.overlay.src = cached.url;
                 elements.overlay.style.filter = 'none';
-                updateStatus(`${workflow}: Ready`);
+                updateStatus(`${statusPrefix}${workflow}: Ready`);
                 return;
             }
         }
@@ -681,6 +715,8 @@
     // Async background loader
     async function loadWorkflowDetailsAsync(img, workflow, cacheKey) {
         state.loadingImages.add(cacheKey);
+        const timeAgo = img.timestamp ? formatTimeAgo(img.timestamp) : '';
+        const statusPrefix = timeAgo ? `[${timeAgo}] ` : '';
         
         try {
             const res = await fetchWithTimeout(`/processor/image/${img.id}/details`, {}, FETCH_TIMEOUT);
@@ -697,7 +733,7 @@
             if (!workflowData) {
                 state.workflowCache.set(cacheKey, { status: 'idle', url: null });
                 if (stillRelevant) {
-                    updateStatus(`${workflow}: Not processed`);
+                    updateStatus(`${statusPrefix}${workflow}: Not processed`);
                 }
                 return;
             }
@@ -712,14 +748,14 @@
             if (workflowData.status === 'completed' && workflowData.job_id) {
                 elements.overlay.src = `/processor/artifact/${workflowData.job_id}/visualizer`;
                 elements.overlay.style.filter = 'none';
-                updateStatus(`${workflow}: Ready`);
+                updateStatus(`${statusPrefix}${workflow}: Ready`);
             } else if (workflowData.status === 'processing' || workflowData.status === 'pending') {
-                updateStatus(`${workflow}: Processing...`);
+                updateStatus(`${statusPrefix}${workflow}: Processing...`);
             } else if (workflowData.status === 'failed' || workflowData.status === 'error') {
                 elements.overlay.style.filter = 'grayscale(1) brightness(0.5)';
-                updateStatus(`${workflow}: Error`);
+                updateStatus(`${statusPrefix}${workflow}: Error`);
             } else {
-                updateStatus(`${workflow}: ${workflowData.status || 'Unknown'}`);
+                updateStatus(`${statusPrefix}${workflow}: ${workflowData.status || 'Unknown'}`);
             }
         } catch (e) {
             console.error('Failed to fetch workflow details:', e);
@@ -727,7 +763,7 @@
             const currentImg = state.processedImages[state.currentProcessedIndex];
             const currentWorkflow = state.workflows[state.currentWorkflowIndex];
             if (currentImg?.id === img.id && currentWorkflow === workflow) {
-                updateStatus(`${workflow}: Unavailable`);
+                updateStatus(`${statusPrefix}${workflow}: Unavailable`);
             }
         } finally {
             state.loadingImages.delete(cacheKey);
@@ -783,11 +819,14 @@
             state.currentMode = 'gallery';
             state.hoveredElement = 'scroll-images';
             state.activeControl = 'scroll-images';
-            showGallery();
+            // Show the temp image directly without reloading from backend
+            showCurrentWorkflowImage();
             updateUI();
         }
         
-        updateStatus('Uploading...');
+        const timeAgo = formatTimeAgo(tempImage.timestamp);
+        const statusPrefix = `[${timeAgo}] `;
+        updateStatus(`${statusPrefix}Uploading...`);
         
         // Do all backend operations asynchronously
         (async () => {
@@ -812,7 +851,7 @@
                         showCurrentWorkflowImage();
                     }
                     
-                    updateStatus('Uploaded');
+                    updateStatus(`${statusPrefix}Uploaded`);
                     
                     // Start workflows one by one, updating status as they start
                     for (const workflow of state.workflows) {
@@ -822,7 +861,7 @@
                             if (wfEntry) wfEntry.status = 'starting';
                             
                             if (state.currentMode === 'gallery' && state.currentProcessedIndex === 0) {
-                                updateStatus(`${workflow}: Starting...`);
+                                updateStatus(`${statusPrefix}${workflow}: Starting...`);
                             }
                             
                             const response = await fetchWithTimeout('/processor/run_workflow', {
@@ -854,7 +893,7 @@
                     }
                     
                     if (state.currentMode === 'gallery' && state.currentProcessedIndex === 0) {
-                        updateStatus('All workflows started');
+                        updateStatus(`${statusPrefix}All workflows started`);
                     }
                     
                     // Now poll for workflow completion one by one
@@ -864,7 +903,7 @@
                 console.error('Upload failed:', e);
                 tempImage.uploadStatus = 'failed';
                 if (state.currentMode === 'gallery' && state.currentProcessedIndex === 0) {
-                    updateStatus('Upload failed');
+                    updateStatus(`${statusPrefix}Upload failed`);
                 }
             }
         })();
@@ -1075,8 +1114,172 @@
             'send-plotter': 'Plot',
             'y-start': `Y-Start: ${state.settings.yStart}%`,
             'y-end': `Y-End: ${state.settings.yEnd}%`,
-            'fullscreen': state.isFullscreen ? 'Exit Full' : 'Fullscreen'
+            'fullscreen': state.isFullscreen ? 'Exit Full' : 'Fullscreen',
+            'audio-toggle': `Audio: ${state.audioEnabled ? 'ON' : 'OFF'}`,
+            'audio-voice': state.audioVoice.charAt(0).toUpperCase() + state.audioVoice.slice(1)
         };
         return labels[control] || control;
+    }
+
+    // Audio streaming functions
+    async function startAudioStream() {
+        if (state.audioRecording) return;
+        
+        try {
+            // Get microphone access - let browser use default sample rate
+            state.audioStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    channelCount: 1,
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false
+                }
+            });
+            
+            // Create audio context - use default sample rate to match microphone
+            state.audioContext = new AudioContext();
+            
+            const source = state.audioContext.createMediaStreamSource(state.audioStream);
+            const actualSampleRate = state.audioContext.sampleRate;
+            
+            // Create processor node for raw PCM output
+            // Use buffer size based on actual sample rate for ~100ms chunks
+            const bufferSize = Math.pow(2, Math.ceil(Math.log2(actualSampleRate * 0.1)));
+            const processor = state.audioContext.createScriptProcessor(bufferSize, 1, 1);
+            
+            processor.onaudioprocess = function(e) {
+                if (!state.audioRecording) return;
+                
+                const inputData = e.inputBuffer.getChannelData(0);
+                
+                // Convert Float32 to Int16
+                const int16Data = new Int16Array(inputData.length);
+                for (let i = 0; i < inputData.length; i++) {
+                    const s = Math.max(-1, Math.min(1, inputData[i]));
+                    int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                }
+                
+                // Convert to base64 and send with sample rate
+                const base64Audio = arrayBufferToBase64(int16Data.buffer);
+                
+                if (state.audioSocket && state.audioSocket.connected) {
+                    state.audioSocket.emit('audio_chunk', { 
+                        audio: base64Audio,
+                        sample_rate: actualSampleRate 
+                    });
+                }
+            };
+            
+            source.connect(processor);
+            processor.connect(state.audioContext.destination);
+            state.audioWorklet = processor;
+            
+            // Connect to SocketIO
+            await connectAudioSocket();
+            
+            state.audioRecording = true;
+            updateStatus('Audio streaming started');
+            
+        } catch (e) {
+            console.error('Failed to start audio:', e);
+            updateStatus('Audio failed: ' + e.message);
+            state.audioEnabled = false;
+            saveSettings();
+            updateUI();
+        }
+    }
+    
+    function stopAudioStream() {
+        state.audioRecording = false;
+        
+        // Stop audio processing
+        if (state.audioWorklet) {
+            state.audioWorklet.disconnect();
+            state.audioWorklet = null;
+        }
+        
+        // Stop microphone
+        if (state.audioStream) {
+            state.audioStream.getTracks().forEach(track => track.stop());
+            state.audioStream = null;
+        }
+        
+        // Close audio context
+        if (state.audioContext) {
+            state.audioContext.close();
+            state.audioContext = null;
+        }
+        
+        // Stop streaming on backend
+        if (state.audioSocket && state.audioSocket.connected) {
+            state.audioSocket.emit('stop_stream', {});
+        }
+        
+        updateStatus('Audio stopped');
+    }
+    
+    function changeAudioVoice(voice) {
+        if (state.audioSocket && state.audioSocket.connected) {
+            state.audioSocket.emit('change_preset', { preset: voice });
+        }
+    }
+    
+    function connectAudioSocket() {
+        return new Promise((resolve, reject) => {
+            if (state.audioSocket && state.audioSocket.connected) {
+                resolve();
+                return;
+            }
+            
+            // Load SocketIO client if not already loaded
+            if (typeof io === 'undefined') {
+                const script = document.createElement('script');
+                script.src = '/socket.io/socket.io.js';
+                script.onload = () => initAudioSocket(resolve, reject);
+                script.onerror = reject;
+                document.head.appendChild(script);
+            } else {
+                initAudioSocket(resolve, reject);
+            }
+        });
+    }
+    
+    function initAudioSocket(resolve, reject) {
+        state.audioSocket = io('/audio');
+        
+        state.audioSocket.on('connect', () => {
+            console.log('Audio socket connected');
+            state.audioSocket.emit('start_stream', { preset: state.audioVoice });
+            resolve();
+        });
+        
+        state.audioSocket.on('connect_error', (e) => {
+            console.error('Audio socket error:', e);
+            reject(e);
+        });
+        
+        state.audioSocket.on('stream_started', (data) => {
+            console.log('Audio stream started:', data);
+        });
+        
+        state.audioSocket.on('stream_stopped', (data) => {
+            console.log('Audio stream stopped:', data);
+        });
+    }
+    
+    function arrayBufferToBase64(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    }
+    
+    // Auto-start audio if enabled
+    function maybeStartAudio() {
+        if (state.audioEnabled && !state.audioRecording) {
+            startAudioStream();
+        }
     }
 })();

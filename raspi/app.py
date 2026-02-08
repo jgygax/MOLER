@@ -21,6 +21,10 @@ from blueprints.huid import (
     huid_bp,
     start_background_threads as start_huid_threads,
 )
+from blueprints.audio import (
+    audio_bp,
+    start_background_threads as start_audio_threads,
+)
 
 load_dotenv()
 
@@ -45,6 +49,7 @@ app.register_blueprint(plotter_bp)
 app.register_blueprint(processor_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(huid_bp)
+app.register_blueprint(audio_bp)
 
 @app.route("/")
 def home():
@@ -67,6 +72,7 @@ if not extensions.plotter_instance:
 start_plotter_threads(socketio)
 start_processor_threads(socketio)
 start_huid_threads(socketio)
+start_audio_threads(socketio)
 
 
 if __name__ == "__main__":
