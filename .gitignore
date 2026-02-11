@@ -5,3 +5,4 @@ plot_patterns
 .env
 uploads
 job_history.json
+audio_tests

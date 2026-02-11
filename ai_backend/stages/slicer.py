@@ -203,9 +203,9 @@ class SlicerStage(BaseStage):
         motor_width = float(params.get("motor_width_mm", 400.0))
         home_distance = float(params.get("home_distance", 1000000))
         # Drawing Area defs
-        area_left = float(params.get("area_left", 100.0))
-        area_right = float(params.get("area_right", 300.0))
-        area_top = float(params.get("area_top_mm", 150.0))
+        area_left = float(params.get("area_left", 135.0))
+        area_right = float(params.get("area_right", 240.0))
+        area_top = float(params.get("area_top_mm", 110.0))
         area_bottom = float(params.get("area_bottom_mm", 350.0))
         # Scale content within the drawing area
         content_scale = float(params.get("scale", 1))
