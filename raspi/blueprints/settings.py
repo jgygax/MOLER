@@ -13,10 +13,6 @@ DEFAULT_SETTINGS = {
     "width_variation": 0.6,
     "x_offset_amount": 1,
     "y_offset_amount": 0,
-    "color_idle": {"r": 0, "g": 0, "b": 64},
-    "color_paint_max": {"r": 255, "g": 255, "b": 255},
-    "color_go_start": {"r": 0, "g": 255, "b": 0},
-    "color_go_home": {"r": 255, "g": 0, "b": 0},
 }
 
 
@@ -51,15 +47,6 @@ def apply_settings_to_plotter():
     # Apply offset settings
     plotter.X_OFFSET_AMOUNT = settings["x_offset_amount"]
     plotter.Y_OFFSET_AMOUNT = settings["y_offset_amount"]
-    
-    # Apply colors
-    plotter.COLOR_IDLE = tuple(settings["color_idle"].values())
-    plotter.COLOR_PAINT_MAX = tuple(settings["color_paint_max"].values())
-    plotter.COLOR_GO_START = tuple(settings["color_go_start"].values())
-    plotter.COLOR_GO_HOME = tuple(settings["color_go_home"].values())
-    
-    # Update LED to reflect new idle color
-    plotter.set_led_idle()
     
     logger.info("Settings applied to VPlotter")
     return True
@@ -103,16 +90,6 @@ def settings_api():
         if "y_offset_amount" in data:
             current_settings["y_offset_amount"] = float(data["y_offset_amount"])
         
-        # Update color settings
-        if "color_idle" in data:
-            current_settings["color_idle"] = data["color_idle"]
-        if "color_paint_max" in data:
-            current_settings["color_paint_max"] = data["color_paint_max"]
-        if "color_go_start" in data:
-            current_settings["color_go_start"] = data["color_go_start"]
-        if "color_go_home" in data:
-            current_settings["color_go_home"] = data["color_go_home"]
-        
         # Apply settings to plotter
         applied = apply_settings_to_plotter()
         
@@ -133,3 +110,30 @@ def reset_settings():
         "settings": extensions.vplotter_settings,
         "applied": applied
     })
+
+
+@settings_bp.route("/settings/led", methods=["GET", "POST"])
+def led_settings_api():
+    """API endpoint to get or update LED settings."""
+    if request.method == "GET":
+        return jsonify(extensions.led_settings)
+    
+    elif request.method == "POST":
+        data = request.json
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        # Update innenlicht toggle
+        if "innenlicht_enabled" in data:
+            extensions.led_settings["innenlicht_enabled"] = bool(data["innenlicht_enabled"])
+        
+        # Update brightness (0.0 to 1.0)
+        if "brightness" in data:
+            brightness = float(data["brightness"])
+            extensions.led_settings["brightness"] = max(0.0, min(1.0, brightness))
+        
+        logger.info(f"LED settings updated: {extensions.led_settings}")
+        return jsonify({
+            "status": "ok",
+            "settings": extensions.led_settings
+        })

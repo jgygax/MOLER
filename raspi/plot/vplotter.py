@@ -15,8 +15,6 @@ except ImportError as e:
     logger.warning("Hardware libraries not found, using mocks")
     from plot.mock import MockGPIO as GPIO
 
-from plot.led_controller import create_led_controller, interpolate_color
-
 
 class StepperMotor:
     HALF_STEP_SEQUENCE = [
@@ -139,12 +137,6 @@ class VPlotter:
     DOCK_POSITION = MOTOR_DISTANCE / 2, 80
     START_POSITION = MOTOR_DISTANCE / 2, 150
 
-    # LED Color Configuration (RGB)
-    COLOR_IDLE = (0, 0, 64)  # Dim blue "accent" color when idle/up (width=0)
-    COLOR_PAINT_MAX = (255, 255, 255)  # Pure white at width=1
-    COLOR_GO_HOME = (255, 0, 0)  # Red when going home
-    COLOR_GO_START = (0, 255, 0)  # Green when going to start
-
     # Width mapping configuration
     START_W = 0.4  # Base width when w=0
     WIDTH_VARIATION = 0.6  # How much width varies with w
@@ -189,9 +181,16 @@ class VPlotter:
         self.canvas_height = int(VPlotter.MOTOR_DISTANCE * VPlotter.PIXELS_PER_MM)
         self.clear_canvas()
 
-        # Initialize LED controller
-        self.led = create_led_controller()
-        self.led_color = self.COLOR_IDLE
+        # Progress tracking for LED controller
+        self.is_plotting = False
+        self.plot_progress = 0.0  # Overall plot progress (0.0 to 1.0)
+        self.current_line_index = 0
+        self.total_lines = 0
+        self.current_line_progress = 0.0  # Current line progress (0.0 to 1.0)
+        self.plot_finished = False
+
+        # Legacy LED color attribute (for API compatibility)
+        self.led_color = (0, 0, 64)
 
         logger.info("VPlotter Initialized")
 
@@ -207,10 +206,6 @@ class VPlotter:
         self.servo_pwm = GPIO.PWM(self.SERVO_PIN, self.SERVO_FREQUENCY)
         self.servo_pwm.start(0)
 
-        # Setup LED
-        self.led.__enter__()
-        self.set_led_idle()
-
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -220,9 +215,6 @@ class VPlotter:
 
         self.left_motor.__exit__(exc_type, exc_value, traceback)
         self.right_motor.__exit__(exc_type, exc_value, traceback)
-
-        # Cleanup LED
-        self.led.__exit__(exc_type, exc_value, traceback)
 
         GPIO.cleanup()
 
@@ -234,26 +226,28 @@ class VPlotter:
         )
 
     def set_led_color(self, r, g, b):
-        """Set the LED color directly."""
+        """Set the LED color (legacy method for API compatibility)."""
         self.led_color = (r, g, b)
-        self.led.set_color(r, g, b)
 
     def set_led_idle(self):
-        """Set LED to idle color (dim blue)."""
-        self.set_led_color(*self.COLOR_IDLE)
+        """Set LED to idle color (legacy method for API compatibility)."""
+        self.led_color = (0, 0, 64)
 
     def set_led_go_home(self):
-        """Set LED to red (going home)."""
-        self.set_led_color(*self.COLOR_GO_HOME)
+        """Set LED to red (legacy method for API compatibility)."""
+        self.led_color = (255, 0, 0)
 
     def set_led_go_start(self):
-        """Set LED to green (going to start position)."""
-        self.set_led_color(*self.COLOR_GO_START)
+        """Set LED to green (legacy method for API compatibility)."""
+        self.led_color = (0, 255, 0)
 
     def set_led_paint(self, width=0):
-        """Set LED color based on paint width (0=accent/idle color, 1=white)."""
-        color = interpolate_color(self.COLOR_IDLE, self.COLOR_PAINT_MAX, width)
-        self.set_led_color(*color)
+        """Set LED color based on paint width (legacy method for API compatibility)."""
+        # Interpolate from dim blue (idle) to white
+        r = int(0 + (255 - 0) * width)
+        g = int(0 + (255 - 0) * width)
+        b = int(64 + (255 - 64) * width)
+        self.led_color = (r, g, b)
 
     def update_canvas(self):
         current_x, current_y = self.get_current_coords()

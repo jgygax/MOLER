@@ -4,6 +4,7 @@ from flask import Flask, render_template
 from flask_socketio import SocketIO
 from dotenv import load_dotenv
 from plot.vplotter import VPlotter
+from plot.led_controller import MultiLEDController
 import extensions
 from blueprints.plotter import (
     plotter_bp,
@@ -64,9 +65,15 @@ if not extensions.plotter_instance:
         extensions.is_processing_job = False # Ensure state
         # Apply default settings to the plotter
         apply_settings_to_plotter()
+        
+        # Initialize MultiLEDController
+        extensions.led_controller = MultiLEDController()
+        extensions.led_controller.start()
+        logger.info("MultiLEDController initialized and started")
     except Exception as e:
         logger.error(f"Could not initialize VPlotter: {e}")
         extensions.plotter_instance = None
+        extensions.led_controller = None
 
 # Ensure threads are started
 start_plotter_threads(socketio)

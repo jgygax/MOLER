@@ -1,5 +1,6 @@
 // Settings management
 let currentSettings = {};
+let ledSettings = {};
 
 // Presets configuration - easy to add more
 const PRESETS = {
@@ -22,6 +23,7 @@ const PRESETS = {
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     loadSettings();
+    loadLedSettings();
 });
 
 async function loadSettings() {
@@ -32,6 +34,16 @@ async function loadSettings() {
         showStatus('Settings loaded');
     } catch (error) {
         showStatus('Error loading settings: ' + error.message, true);
+    }
+}
+
+async function loadLedSettings() {
+    try {
+        const response = await fetch('/settings/led');
+        ledSettings = await response.json();
+        updateLedUIFromSettings();
+    } catch (error) {
+        console.error('Error loading LED settings:', error);
     }
 }
 
@@ -47,28 +59,62 @@ function updateUIFromSettings() {
     // Offset settings
     document.getElementById('x-offset-amount').value = currentSettings.x_offset_amount;
     document.getElementById('y-offset-amount').value = currentSettings.y_offset_amount;
+}
+
+function updateLedUIFromSettings() {
+    // LED settings
+    const innenlichtToggle = document.getElementById('innenlicht-toggle');
+    const brightnessSlider = document.getElementById('led-brightness');
+    const brightnessValue = document.getElementById('brightness-value');
     
-    // Color settings
-    document.getElementById('color-idle').value = rgbToHex(
-        currentSettings.color_idle.r,
-        currentSettings.color_idle.g,
-        currentSettings.color_idle.b
-    );
-    document.getElementById('color-paint-max').value = rgbToHex(
-        currentSettings.color_paint_max.r,
-        currentSettings.color_paint_max.g,
-        currentSettings.color_paint_max.b
-    );
-    document.getElementById('color-go-start').value = rgbToHex(
-        currentSettings.color_go_start.r,
-        currentSettings.color_go_start.g,
-        currentSettings.color_go_start.b
-    );
-    document.getElementById('color-go-home').value = rgbToHex(
-        currentSettings.color_go_home.r,
-        currentSettings.color_go_home.g,
-        currentSettings.color_go_home.b
-    );
+    if (innenlichtToggle) {
+        innenlichtToggle.checked = ledSettings.innenlicht_enabled;
+    }
+    if (brightnessSlider) {
+        brightnessSlider.value = Math.round(ledSettings.brightness * 100);
+        brightnessValue.textContent = Math.round(ledSettings.brightness * 100) + '%';
+    }
+    
+    // Add event listeners for LED controls
+    if (innenlichtToggle) {
+        innenlichtToggle.addEventListener('change', async () => {
+            await saveLedSettings();
+        });
+    }
+    
+    if (brightnessSlider) {
+        brightnessSlider.addEventListener('input', (e) => {
+            brightnessValue.textContent = e.target.value + '%';
+        });
+        brightnessSlider.addEventListener('change', async () => {
+            await saveLedSettings();
+        });
+    }
+}
+
+async function saveLedSettings() {
+    const settings = {
+        innenlicht_enabled: document.getElementById('innenlicht-toggle').checked,
+        brightness: parseInt(document.getElementById('led-brightness').value) / 100
+    };
+    
+    try {
+        const response = await fetch('/settings/led', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings)
+        });
+        
+        const result = await response.json();
+        if (result.status === 'ok') {
+            ledSettings = result.settings;
+            showStatus('LED settings saved');
+        } else {
+            showStatus('Error: ' + result.error, true);
+        }
+    } catch (error) {
+        showStatus('Error saving LED settings: ' + error.message, true);
+    }
 }
 
 function applyPreset(presetKey) {
@@ -91,11 +137,7 @@ async function saveSettings() {
         start_w: parseFloat(document.getElementById('start-w').value),
         width_variation: parseFloat(document.getElementById('width-variation').value),
         x_offset_amount: parseFloat(document.getElementById('x-offset-amount').value),
-        y_offset_amount: parseFloat(document.getElementById('y-offset-amount').value),
-        color_idle: hexToRgb(document.getElementById('color-idle').value),
-        color_paint_max: hexToRgb(document.getElementById('color-paint-max').value),
-        color_go_start: hexToRgb(document.getElementById('color-go-start').value),
-        color_go_home: hexToRgb(document.getElementById('color-go-home').value)
+        y_offset_amount: parseFloat(document.getElementById('y-offset-amount').value)
     };
     
     try {
@@ -153,21 +195,4 @@ function showStatus(message, isError = false) {
         toast.style.animation = 'fadeOutDown 0.3s ease forwards';
         setTimeout(() => toast.remove(), 300);
     }, 3000);
-}
-
-// Helper functions
-function rgbToHex(r, g, b) {
-    return '#' + [r, g, b].map(x => {
-        const hex = Math.round(x).toString(16);
-        return hex.length === 1 ? '0' + hex : hex;
-    }).join('');
-}
-
-function hexToRgb(hex) {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-        r: parseInt(result[1], 16),
-        g: parseInt(result[2], 16),
-        b: parseInt(result[3], 16)
-    } : { r: 0, g: 0, b: 0 };
 }
