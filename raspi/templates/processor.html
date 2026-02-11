@@ -130,11 +130,10 @@
     }
 
     .controls-panel {
-        flex: 0 0 320px;
+        flex: 0 0 auto;
         display: flex;
         flex-direction: column;
         background: #0a0a0a;
-        overflow-y: auto;
     }
 
     .preference-bar {
@@ -215,14 +214,12 @@
         </div>
 
         <div class="upload-panel">
-            <h2>Process Image</h2>
-
             <label for="imageUpload" class="custom-file-upload">
                 <div id="preview-box">
                     <i class="fas fa-cloud-upload-alt"></i>
-                    <span>Upload Image</span>
+                    <span>Tap to select photo</span>
                 </div>
-                <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+                <input type="file" id="imageUpload" accept="image/*" capture="environment" style="display: none;">
             </label>
 
             <div class="auto-process-bar">
@@ -232,15 +229,9 @@
                             <input type="checkbox" id="autoProcessToggle" checked>
                             <span class="slider"></span>
                         </label>
-                        <span style="font-size: 0.8rem;">Auto Process</span>
+                        <span style="font-size: 0.8rem;">Auto Process All Styles</span>
                     </div>
                 </div>
-            </div>
-
-            <div class="form-group">
-                <button id="uploadBtn" class="primary action-btn" disabled>
-                    <i class="fas fa-magic"></i> Upload
-                </button>
             </div>
         </div>
     </div>

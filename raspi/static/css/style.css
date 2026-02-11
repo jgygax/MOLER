@@ -24,34 +24,67 @@ body {
 
 .nav-bar {
     background: #222;
-    padding: 10px 20px;
+    padding: 8px 0;
     display: flex;
-    align-items: center;
+    justify-content: center;
     border-bottom: 1px solid #333;
     flex-shrink: 0;
 }
 
-.brand {
-    font-weight: bold;
-    color: var(--accent);
-    text-decoration: none;
-    margin-right: 30px;
-    font-size: 1.2rem;
+.nav-links {
+    display: flex;
+    gap: 0;
 }
 
 .nav-links a {
     color: #888;
     text-decoration: none;
-    margin-right: 15px;
-    padding: 5px 10px;
-    border-radius: 4px;
+    padding: 10px 16px;
+    border-radius: 8px;
     transition: 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    min-width: 60px;
+}
+
+.nav-links a i {
+    font-size: 1.4rem;
+}
+
+.nav-links a .nav-label {
+    display: none;
 }
 
 .nav-links a.active,
 .nav-links a:hover {
     background: #333;
-    color: white;
+    color: var(--accent);
+}
+
+@media (min-width: 768px) {
+    .nav-bar {
+        padding: 10px 20px;
+        justify-content: flex-start;
+    }
+
+    .nav-links a {
+        flex-direction: row;
+        gap: 8px;
+        font-size: 0.9rem;
+        padding: 8px 16px;
+        min-width: auto;
+    }
+
+    .nav-links a i {
+        font-size: 1rem;
+    }
+
+    .nav-links a .nav-label {
+        display: inline;
+    }
 }
 
 .main-content {
@@ -332,41 +365,40 @@ img.plotter-feed {
 /* Processor Specifics */
 
 .processor-container {
-    background: #2d2d2d;
     width: 100%;
     max-width: 1100px;
-    height: 85vh;
-    border-radius: 8px;
     display: flex;
-    overflow: hidden;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+    flex-direction: column;
     gap: 1px;
 }
 
 .upload-panel {
-    flex: 0 0 320px;
     background: #0a0a0a;
     padding: 15px;
     display: flex;
     flex-direction: column;
     gap: 15px;
-    overflow-y: auto;
 }
 
 .gallery-panel {
     flex: 1;
     background: #0a0a0a;
     padding: 15px;
-    overflow-y: auto;
     display: flex;
     flex-direction: column;
 }
 
 .gallery-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 20px;
-    flex: 1;
+    grid-template-columns: 1fr;
+    gap: 15px;
+}
+
+@media (min-width: 640px) {
+    .gallery-grid {
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 20px;
+    }
 }
 
 .gallery-card {
@@ -654,16 +686,15 @@ img.plotter-feed {
     border: 2px dashed #333;
     background: #111;
     padding: 0;
-    height: 140px;
+    min-height: 180px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    border-radius: 6px;
+    border-radius: 12px;
     transition: all 0.2s;
     overflow: hidden;
     position: relative;
-    flex-shrink: 0;
 }
 
 .custom-file-upload:hover {
@@ -676,21 +707,24 @@ img.plotter-feed {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     color: #666;
     width: 100%;
-    height: 100%;
+    min-height: 180px;
     justify-content: center;
+    padding: 20px;
 }
 
 #preview-box i {
-    font-size: 2rem;
+    font-size: 2.5rem;
 }
 
 #preview-box img {
     width: 100%;
-    height: 100%;
+    height: auto;
+    max-height: 300px;
     object-fit: contain;
+    border-radius: 8px;
 }
 
 .form-group {
@@ -780,67 +814,28 @@ textarea {
     border-color: var(--accent);
 }
 
-@media (max-width: 768px) {
-    body {
-        height: auto;
-    }
-
-    .main-content {
-        overflow: visible;
-    }
-
-    .app-container {
-        flex-direction: column;
-        height: auto;
-        min-height: auto;
-        border-radius: 0;
-    }
-
-    .sidebar {
-        flex: 0 0 auto;
-        width: 100%;
-        order: 2;
-    }
-
-    .viz-panel {
-        order: 1;
-        min-height: 350px;
-        padding: 10px;
-    }
-
-    .job-panel {
-        max-height: 300px;
-    }
-
-    .file-upload input {
-        width: auto;
-    }
-
+@media (min-width: 768px) {
     .processor-container {
-        flex-direction: column;
-        height: auto;
-        min-height: auto;
+        flex-direction: row;
+        height: 85vh;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+        background: #2d2d2d;
     }
 
     .upload-panel {
-        width: 100%;
-        flex: 0 0 auto;
-        order: 1;
+        flex: 0 0 320px;
+        overflow-y: auto;
     }
 
     .gallery-panel {
-        order: 2;
-        min-height: 400px;
+        overflow-y: auto;
     }
 
-    .gallery-card {
-        flex-direction: column !important;
-        height: auto !important;
-    }
-
-    .card-media {
-        width: 100% !important;
-        aspect-ratio: 1;
-        height: auto !important;
+    .app-container {
+        height: 85vh;
+        border-radius: 8px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
     }
 }

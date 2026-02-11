@@ -8,22 +8,17 @@ const socket = io();
 const GALLERY_GRID = document.getElementById('galleryGrid');
 const IMAGE_UPLOAD = document.getElementById('imageUpload');
 const PREVIEW_BOX = document.getElementById('preview-box');
-const UPLOAD_BTN = document.getElementById('uploadBtn');
 let currentDetailsImageId = null;
 let scaledBlob = null;
 let cardStates = new Map(); // imageId -> current slide index
+let isUploading = false;
 
 // --- Initialization ---
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Fix icons on load - although we might just remove these static buttons anyway
-    const kawaiiBtn = document.querySelector('button[onclick*="kawaii"]');
-    if (kawaiiBtn) kawaiiBtn.innerHTML = '<i class="fas fa-magic"></i> Kawaii';
-
     loadImages(true);
 
     IMAGE_UPLOAD.addEventListener('change', handleFileSelect);
-    UPLOAD_BTN.addEventListener('click', uploadAndProcess);
 
     // Preference change handler - apply to all cards instantly
     document.getElementById('preferenceSelect').addEventListener('change', () => {
@@ -65,11 +60,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function handleFileSelect(e) {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file || isUploading) return;
 
     console.log('File selected:', file.name, file.size, file.type);
 
     try {
+        isUploading = true;
+        PREVIEW_BOX.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Processing...</span>';
+
         const bitmap = await createImageBitmap(file);
         console.log('Original dimensions:', bitmap.width, 'x', bitmap.height);
 
@@ -124,35 +122,43 @@ async function handleFileSelect(e) {
             console.warn('Pixel check failed:', e);
         }
 
-        canvas.toBlob((blob) => {
-            if (blob) {
-                console.log('Scaled blob size:', blob.size);
-                scaledBlob = blob;
+        canvas.toBlob(async (blob) => {
+            try {
+                if (blob) {
+                    console.log('Scaled blob size:', blob.size);
+                    scaledBlob = blob;
 
-                if (PREVIEW_BOX.querySelector('img')) {
-                    URL.revokeObjectURL(PREVIEW_BOX.querySelector('img').src);
+                    // Show preview
+                    const previewUrl = URL.createObjectURL(blob);
+                    PREVIEW_BOX.innerHTML = `<img src="${previewUrl}" alt="Preview">`;
+
+                    // Auto-upload
+                    await uploadAndProcess();
                 }
-
-                const previewUrl = URL.createObjectURL(blob);
-                PREVIEW_BOX.innerHTML = `<img src="${previewUrl}" alt="Preview">`;
-                UPLOAD_BTN.disabled = false;
+            } catch (err) {
+                console.error('Upload failed:', err);
+                showToast('Upload failed', 'error');
+                PREVIEW_BOX.innerHTML = '<i class="fas fa-cloud-upload-alt"></i><span>Tap to select photo</span>';
+            } finally {
+                isUploading = false;
+                // Cleanup
+                if (canvas.parentNode) document.body.removeChild(canvas);
+                bitmap.close();
             }
-            // Cleanup
-            if (canvas.parentNode) document.body.removeChild(canvas);
-            bitmap.close();
         }, 'image/jpeg', 0.9);
 
     } catch (err) {
         console.error('Processing failed:', err);
-        alert('Could not process image.');
+        showToast('Could not process image', 'error');
+        PREVIEW_BOX.innerHTML = '<i class="fas fa-cloud-upload-alt"></i><span>Tap to select photo</span>';
+        isUploading = false;
     }
 }
 
 async function uploadAndProcess() {
     if (!scaledBlob) return;
     try {
-        UPLOAD_BTN.disabled = true;
-        UPLOAD_BTN.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+        PREVIEW_BOX.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Uploading...</span>';
 
         const placeholderId = 'temp-' + Date.now();
         const placeholderMeta = {
@@ -184,7 +190,6 @@ async function uploadAndProcess() {
             const autoProcessToggle = document.getElementById('autoProcessToggle').checked;
 
             if (autoProcessToggle) {
-                // Process all styles in parallel
                 // Process all styles in parallel with different priorities
                 const styles = [
                     { name: 'clean', priority: 13 },
@@ -218,21 +223,19 @@ async function uploadAndProcess() {
 
             scaledBlob = null;
             IMAGE_UPLOAD.value = '';
-            PREVIEW_BOX.innerHTML = '<i class="fas fa-cloud-upload-alt"></i><span>Upload Image</span>';
-            UPLOAD_BTN.innerHTML = '<i class="fas fa-magic"></i> Upload & Process';
+            PREVIEW_BOX.innerHTML = '<i class="fas fa-cloud-upload-alt"></i><span>Tap to select photo</span>';
         } else {
             showToast('Upload failed: ' + result.error, 'error');
             const placeholder = document.querySelector(`.gallery-card[data-id="${placeholderId}"]`);
             if (placeholder) placeholder.remove();
+            PREVIEW_BOX.innerHTML = '<i class="fas fa-cloud-upload-alt"></i><span>Tap to select photo</span>';
         }
     } catch (err) {
         console.error(err);
         showToast('Upload failed due to network error.', 'error');
         const placeholder = document.querySelector('.gallery-card.placeholder');
         if (placeholder) placeholder.remove();
-    } finally {
-        UPLOAD_BTN.disabled = false;
-        UPLOAD_BTN.innerHTML = '<i class="fas fa-magic"></i> Upload & Process';
+        PREVIEW_BOX.innerHTML = '<i class="fas fa-cloud-upload-alt"></i><span>Tap to select photo</span>';
     }
 }
 

@@ -13,15 +13,30 @@
 
 <body>
     <div class="nav-bar">
-        <a href="{{ url_for('home') }}" class="brand">MOLER</a>
         <div class="nav-links">
+            <a href="{{ url_for('home') }}" class="{{ 'active' if request.endpoint == 'home' }}" title="Home">
+                <i class="fas fa-home"></i>
+                <span class="nav-label">Home</span>
+            </a>
             <a href="{{ url_for('plotter.index') }}"
-                class="{{ 'active' if request.endpoint and 'plotter' in request.endpoint }}">Plotter</a>
-            <a href="/processor" class="">AI Lab</a>
+                class="{{ 'active' if request.endpoint and 'plotter' in request.endpoint }}" title="Plotter">
+                <i class="fas fa-pen-nib"></i>
+                <span class="nav-label">Plotter</span>
+            </a>
+            <a href="/processor" class="{{ 'active' if request.endpoint and 'processor' in request.endpoint }}" title="AI Lab">
+                <i class="fas fa-robot"></i>
+                <span class="nav-label">AI Lab</span>
+            </a>
             <a href="{{ url_for('settings.index') }}"
-                class="{{ 'active' if request.endpoint and 'settings' in request.endpoint }}">Settings</a>
+                class="{{ 'active' if request.endpoint and 'settings' in request.endpoint }}" title="Settings">
+                <i class="fas fa-cog"></i>
+                <span class="nav-label">Settings</span>
+            </a>
             <a href="{{ url_for('huid.index') }}"
-                class="{{ 'active' if request.endpoint and 'huid' in request.endpoint }}">HUID VR</a>
+                class="{{ 'active' if request.endpoint and 'huid' in request.endpoint }}" title="HUID VR">
+                <i class="fas fa-vr-cardboard"></i>
+                <span class="nav-label">HUID VR</span>
+            </a>
         </div>
     </div>
 
