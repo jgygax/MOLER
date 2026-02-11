@@ -1,6 +1,7 @@
 import logging
 from flask import Blueprint, render_template, request, jsonify
 import extensions
+from settings_storage import save_settings
 
 logger = logging.getLogger(__name__)
 settings_bp = Blueprint("settings", __name__)
@@ -17,9 +18,7 @@ DEFAULT_SETTINGS = {
 
 
 def get_settings():
-    """Get current settings, initializing if needed."""
-    if not hasattr(extensions, 'vplotter_settings') or extensions.vplotter_settings is None:
-        extensions.vplotter_settings = DEFAULT_SETTINGS.copy()
+    """Get current settings. Settings are loaded from disk on startup."""
     return extensions.vplotter_settings
 
 
@@ -93,6 +92,9 @@ def settings_api():
         # Apply settings to plotter
         applied = apply_settings_to_plotter()
         
+        # Persist settings to disk
+        save_settings(vplotter_settings=current_settings)
+        
         return jsonify({
             "status": "ok",
             "settings": current_settings,
@@ -103,8 +105,13 @@ def settings_api():
 @settings_bp.route("/settings/reset", methods=["POST"])
 def reset_settings():
     """Reset settings to defaults."""
-    extensions.vplotter_settings = DEFAULT_SETTINGS.copy()
+    from settings_storage import DEFAULT_VPLOTTER_SETTINGS
+    extensions.vplotter_settings = DEFAULT_VPLOTTER_SETTINGS.copy()
     applied = apply_settings_to_plotter()
+    
+    # Persist reset settings to disk
+    save_settings(vplotter_settings=extensions.vplotter_settings)
+    
     return jsonify({
         "status": "ok",
         "settings": extensions.vplotter_settings,
@@ -133,6 +140,10 @@ def led_settings_api():
             extensions.led_settings["brightness"] = max(0.0, min(1.0, brightness))
         
         logger.info(f"LED settings updated: {extensions.led_settings}")
+        
+        # Persist LED settings to disk
+        save_settings(led_settings=extensions.led_settings)
+        
         return jsonify({
             "status": "ok",
             "settings": extensions.led_settings

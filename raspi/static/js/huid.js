@@ -31,7 +31,8 @@
         workflows: ['clean', 'realistic', 'kawaii', 'full'],
         autoGallery: false,
         audioEnabled: false,
-        audioVoice: 'dalek',
+        audioVoice: 'pitch_up',
+        crop: { left: 0, top: 0, right: 0, bottom: 0 },
         audioSocket: null,
         audioStream: null,
         audioContext: null,
@@ -54,8 +55,8 @@
     const MAX_DB_FRAMES = 1000;
     const FETCH_TIMEOUT = 15000;
 
-    const OPTION_CONTROLS = ['scroll-workflows', 'switch-camera', 'zoom', 'pan-x', 'pan-y', 'y-start', 'y-end', 'auto-gallery', 'audio-toggle', 'audio-voice'];
-    const ACTION_CONTROLS = ['process', 'send-plotter', 'fullscreen', 'scroll-timeline', 'scroll-images'];
+    const OPTION_CONTROLS = ['scroll-workflows', 'switch-camera', 'zoom', 'pan-x', 'pan-y', 'y-start', 'y-end', 'auto-gallery', 'audio-toggle', 'audio-voice', 'crop-left', 'crop-right', 'crop-top', 'crop-bottom'];
+    const ACTION_CONTROLS = ['process', 'send-plotter', 'fullscreen', 'scroll-timeline', 'scroll-images', 'reset-crop'];
 
     document.addEventListener('DOMContentLoaded', init);
 
@@ -80,7 +81,9 @@
         elements.uiContainer = document.getElementById('ui-container');
         elements.topBar = document.getElementById('top-bar');
         elements.bottomBar = document.getElementById('bottom-bar');
+        elements.overlayContainer = document.getElementById('overlay-container');
         elements.overlay = document.getElementById('overlay-image');
+        elements.cropOverlay = document.getElementById('crop-overlay');
         elements.status = document.getElementById('status-text');
         elements.timelineBar = document.getElementById('timeline-bar');
         elements.timelineProgress = document.getElementById('timeline-progress');
@@ -147,7 +150,7 @@
             state.autoGallery = parsed.autoGallery || false;
             state.currentWorkflowIndex = parsed.currentWorkflowIndex || 0;
             state.audioEnabled = parsed.audioEnabled || false;
-            state.audioVoice = parsed.audioVoice || 'dalek';
+            state.audioVoice = parsed.audioVoice || 'pitch_up';
         }
     }
 
@@ -166,12 +169,24 @@
     function applyYConstraints() {
         document.documentElement.style.setProperty('--y-start', state.settings.yStart + '%');
         document.documentElement.style.setProperty('--y-end', state.settings.yEnd + '%');
+        // Also update crop variables
+        document.documentElement.style.setProperty('--crop-left', state.crop.left + '%');
+        document.documentElement.style.setProperty('--crop-right', state.crop.right + '%');
+        document.documentElement.style.setProperty('--crop-top', state.crop.top + '%');
+        document.documentElement.style.setProperty('--crop-bottom', state.crop.bottom + '%');
     }
 
     async function enumerateCameras() {
         try {
+            // First get permission by requesting any camera
+            // This is required to get device labels
+            const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            tempStream.getTracks().forEach(t => t.stop());
+            
+            // Now enumerate with permission granted
             const devices = await navigator.mediaDevices.enumerateDevices();
             state.cameras = devices.filter(d => d.kind === 'videoinput');
+            console.log('Found cameras:', state.cameras.map(c => ({ id: c.deviceId.slice(0, 8), label: c.label })));
         } catch (e) { console.error('Camera enumeration error:', e); }
     }
 
@@ -189,17 +204,38 @@
         if (state.stream) state.stream.getTracks().forEach(t => t.stop());
         try {
             const constraints = { video: { width: { ideal: 512 }, height: { ideal: 512 } } };
-            if (state.cameras[state.currentCameraIndex]?.deviceId) {
-                constraints.video.deviceId = { exact: state.cameras[state.currentCameraIndex].deviceId };
+            
+            const selectedCamera = state.cameras[state.currentCameraIndex];
+            if (selectedCamera?.deviceId) {
+                // Use exact deviceId if we have it
+                constraints.video.deviceId = { exact: selectedCamera.deviceId };
+                console.log('Starting camera:', selectedCamera.label || `Camera ${state.currentCameraIndex + 1}`, 'ID:', selectedCamera.deviceId.slice(0, 8));
+            } else if (state.cameras.length > 0) {
+                // Fallback: try to use facing mode for mobile
+                // Front camera (selfie) usually has "user" facing mode
+                // Back camera usually has "environment" facing mode
+                const isFrontCamera = state.currentCameraIndex === 0;
+                constraints.video.facingMode = isFrontCamera ? 'user' : 'environment';
+                console.log('Using facing mode:', constraints.video.facingMode);
             }
+            
             state.stream = await navigator.mediaDevices.getUserMedia(constraints);
             elements.video.srcObject = state.stream;
-        } catch (e) { console.error('Camera error:', e); }
+            console.log('Camera started successfully');
+        } catch (e) { 
+            console.error('Camera error:', e);
+            updateStatus('Camera error: ' + e.message);
+        }
     }
 
     function switchCamera() {
-        if (state.cameras.length <= 1) return;
+        if (state.cameras.length <= 1) {
+            updateStatus('Only 1 camera found');
+            return;
+        }
         state.currentCameraIndex = (state.currentCameraIndex + 1) % state.cameras.length;
+        const cameraName = getCurrentCameraName();
+        updateStatus('Switching to: ' + cameraName);
         saveSettings();
         startCamera();
         updateUI();
@@ -304,6 +340,22 @@
         document.addEventListener('mousedown', handleMouseDown);
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.addEventListener('fullscreenchange', () => { state.isFullscreen = !!document.fullscreenElement; updateUI(); });
+        
+        // Update crop overlay on window resize
+        window.addEventListener('resize', () => {
+            if (state.currentMode === 'timeline') {
+                setTimeout(updateCropOverlay, 100);
+            }
+        });
+        
+        // Update crop overlay when image loads
+        if (elements.overlay) {
+            elements.overlay.addEventListener('load', () => {
+                if (state.currentMode === 'timeline') {
+                    setTimeout(updateCropOverlay, 50);
+                }
+            });
+        }
     }
 
     function toggleFullscreen() {
@@ -339,7 +391,7 @@
         if (state.isLocked) return [];
         switch (state.currentMode) {
             case 'camera': return ['zoom', 'pan-x', 'pan-y', 'switch-camera'];
-            case 'timeline': return ['scroll-timeline', 'process', 'auto-gallery'];
+            case 'timeline': return ['scroll-timeline', 'crop-left', 'crop-right', 'crop-top', 'crop-bottom', 'reset-crop', 'process', 'auto-gallery'];
             case 'gallery': return ['scroll-images', 'scroll-workflows', 'send-plotter'];
             case 'audio': return ['audio-toggle', 'audio-voice'];
             case 'settings': return ['y-start', 'y-end', 'fullscreen'];
@@ -544,13 +596,38 @@
                 }
                 break;
             case 'audio-voice':
-                const voices = ['dalek', 'walle', 'evil'];
+                const voices = ['pitch_up'];
                 const currentIndex = voices.indexOf(state.audioVoice);
                 state.audioVoice = voices[(currentIndex + 1) % voices.length];
                 saveSettings();
                 if (state.audioRecording) {
                     changeAudioVoice(state.audioVoice);
                 }
+                break;
+            case 'crop-left':
+                state.crop.left = Math.max(0, Math.min(90 - state.crop.right, state.crop.left + delta * 2));
+                updateCropOverlay();
+                updateStatus(`Crop L: ${state.crop.left}%`);
+                break;
+            case 'crop-right':
+                state.crop.right = Math.max(0, Math.min(90 - state.crop.left, state.crop.right + delta * 2));
+                updateCropOverlay();
+                updateStatus(`Crop R: ${state.crop.right}%`);
+                break;
+            case 'crop-top':
+                state.crop.top = Math.max(0, Math.min(90 - state.crop.bottom, state.crop.top + delta * 2));
+                updateCropOverlay();
+                updateStatus(`Crop T: ${state.crop.top}%`);
+                break;
+            case 'crop-bottom':
+                state.crop.bottom = Math.max(0, Math.min(90 - state.crop.top, state.crop.bottom + delta * 2));
+                updateCropOverlay();
+                updateStatus(`Crop B: ${state.crop.bottom}%`);
+                break;
+            case 'reset-crop':
+                state.crop = { left: 0, top: 0, right: 0, bottom: 0 };
+                updateCropOverlay();
+                state.activeControl = null;
                 break;
         }
         updateUI();
@@ -614,9 +691,13 @@
             state.currentFrameTimestamp = state.frames[0].timestamp;
             const frame = state.frames[0];
             elements.overlay.src = frame.dataUrl;
-            elements.overlay.style.display = 'block';
+            showOverlay();
             elements.overlay.style.filter = 'none';
             if (elements.timelineBar) elements.timelineBar.classList.add('visible');
+            // Wait for image to load before updating crop overlay
+            requestAnimationFrame(() => {
+                setTimeout(updateCropOverlay, 100);
+            });
             updateTimelineDisplay();
             updateStatus(formatTimeAgo(frame.timestamp));
             startStatusUpdates();
@@ -637,7 +718,12 @@
         const frame = state.frames[clampedIndex];
         state.currentFrameTimestamp = frame.timestamp;
         elements.overlay.src = frame.dataUrl;
+        showOverlay();
         elements.overlay.style.filter = 'none';
+        // Wait for image to load before updating crop overlay
+        requestAnimationFrame(() => {
+            setTimeout(updateCropOverlay, 100);
+        });
         updateTimelineDisplay();
         updateStatus(formatTimeAgo(frame.timestamp));
     }
@@ -661,9 +747,10 @@
         const statusPrefix = timeAgo ? `[${timeAgo}] ` : '';
         
         // Show fallback immediately (thumbnail/original in B&W)
-        elements.overlay.style.display = 'block';
+        showOverlay();
         elements.overlay.src = img.thumbnail || img.original_url;
         elements.overlay.style.filter = 'grayscale(1) brightness(0.7)';
+        hideCropOverlay();
         
         // Handle temp images with local workflow data
         if (img.isTemp) {
@@ -788,15 +875,69 @@
     }
 
     function hideOverlay() {
-        elements.overlay.style.display = 'none';
+        if (elements.overlayContainer) elements.overlayContainer.classList.remove('visible');
         if (elements.timelineBar) elements.timelineBar.classList.remove('visible');
+        hideCropOverlay();
         updateStatus('');
+    }
+
+    function showOverlay() {
+        if (elements.overlayContainer) elements.overlayContainer.classList.add('visible');
+    }
+
+    function updateCropOverlay() {
+        if (!elements.cropOverlay || !elements.overlay) return;
+        
+        const hasCrop = state.crop.left > 0 || state.crop.right > 0 || state.crop.top > 0 || state.crop.bottom > 0;
+        
+        // Show crop overlay in timeline mode (where we process images)
+        if (hasCrop && state.currentMode === 'timeline') {
+            // Get the actual displayed image rectangle
+            const imgRect = elements.overlay.getBoundingClientRect();
+            const containerRect = elements.overlayContainer.getBoundingClientRect();
+            
+            // Position crop overlay to match the actual displayed image
+            const overlayStyle = elements.cropOverlay.style;
+            overlayStyle.display = 'block';
+            overlayStyle.left = (imgRect.left - containerRect.left) + 'px';
+            overlayStyle.top = (imgRect.top - containerRect.top) + 'px';
+            overlayStyle.width = imgRect.width + 'px';
+            overlayStyle.height = imgRect.height + 'px';
+            
+            // Calculate crop display positions based on percentages
+            const cropTopPx = (state.crop.top / 100) * imgRect.height;
+            const cropBottomPx = (state.crop.bottom / 100) * imgRect.height;
+            const cropLeftPx = (state.crop.left / 100) * imgRect.width;
+            const cropRightPx = (state.crop.right / 100) * imgRect.width;
+            
+            // Update CSS variables for the overlay
+            elements.cropOverlay.style.setProperty('--crop-top-display', cropTopPx + 'px');
+            elements.cropOverlay.style.setProperty('--crop-bottom-display', cropBottomPx + 'px');
+            elements.cropOverlay.style.setProperty('--crop-left-display', cropLeftPx + 'px');
+            elements.cropOverlay.style.setProperty('--crop-right-display', cropRightPx + 'px');
+            
+            console.log('Crop overlay positioned:', {
+                imageSize: `${imgRect.width}x${imgRect.height}`,
+                crop: state.crop,
+                pixels: { top: cropTopPx, bottom: cropBottomPx, left: cropLeftPx, right: cropRightPx }
+            });
+        } else {
+            hideCropOverlay();
+        }
+    }
+
+    function hideCropOverlay() {
+        if (!elements.cropOverlay) return;
+        elements.cropOverlay.style.display = 'none';
     }
 
     async function processFrame() {
         if (state.frames.length === 0) return;
         const frameIdx = getCurrentFrameIndex();
         const frame = state.frames[frameIdx] || state.frames[0];
+        
+        // Check if crop is applied
+        const hasCrop = state.crop.left > 0 || state.crop.right > 0 || state.crop.top > 0 || state.crop.bottom > 0;
         
         // Generate a temporary ID for immediate display
         const tempId = 'temp_' + Date.now();
@@ -831,9 +972,21 @@
         // Do all backend operations asynchronously
         (async () => {
             try {
+                // Always send the original image - let the server handle cropping
                 const blob = await fetch(frame.dataUrl).then(r => r.blob());
+                
                 const formData = new FormData();
                 formData.append('image', blob, 'frame.jpg');
+                
+                // Send crop coordinates to server if applied
+                if (hasCrop) {
+                    console.log('Sending crop coordinates:', state.crop);
+                    updateStatus(`${statusPrefix}Uploading with crop...`);
+                    formData.append('crop_left', state.crop.left);
+                    formData.append('crop_top', state.crop.top);
+                    formData.append('crop_right', state.crop.right);
+                    formData.append('crop_bottom', state.crop.bottom);
+                }
                 
                 const uploadRes = await fetchWithTimeout('/processor/upload', { method: 'POST', body: formData }, FETCH_TIMEOUT);
                 const uploadData = await uploadRes.json();
@@ -985,6 +1138,9 @@
         const workflow = state.workflows[state.currentWorkflowIndex];
         updateStatus('Getting job info...');
         
+        // Check if we need to apply crop
+        const hasCrop = state.crop.left > 0 || state.crop.right > 0 || state.crop.top > 0 || state.crop.bottom > 0;
+        
         try {
             // Get job_id from cache or fetch from backend
             const cacheKey = `${img.id}-${workflow}`;
@@ -1055,6 +1211,72 @@
                 }, FETCH_TIMEOUT);
             }
             
+            // If crop is applied, fetch and crop the visualizer image first
+            if (hasCrop && slicers.length > 0) {
+                updateStatus('Applying crop...');
+                try {
+                    const visualizerUrl = `/processor/artifact/${jobId}/visualizer`;
+                    const croppedBlob = await cropImage(visualizerUrl, state.crop);
+                    
+                    // Upload the cropped image as a new image
+                    const formData = new FormData();
+                    formData.append('image', croppedBlob, 'cropped.jpg');
+                    
+                    const uploadRes = await fetchWithTimeout('/processor/upload', { 
+                        method: 'POST', 
+                        body: formData 
+                    }, FETCH_TIMEOUT);
+                    
+                    const uploadData = await uploadRes.json();
+                    if (uploadData.status === 'ok' || uploadData.success) {
+                        // Run the same workflow on the cropped image
+                        const workflowRes = await fetchWithTimeout('/processor/run_workflow', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                image_id: uploadData.image_id, 
+                                workflow_name: workflow 
+                            })
+                        }, FETCH_TIMEOUT);
+                        
+                        const workflowResult = await workflowRes.json();
+                        if (workflowResult.job_id) {
+                            // Wait a moment for processing to start
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            
+                            // Get the new job's slicers
+                            const newStatusRes = await fetchWithTimeout(`/processor/status?ids=${workflowResult.job_id}`, {}, FETCH_TIMEOUT);
+                            const newJobsMeta = await newStatusRes.json();
+                            const newArtifacts = newJobsMeta[0]?.artifacts || [];
+                            const newSlicers = newArtifacts
+                                .filter(a => a.slug && a.slug.startsWith('slicer'))
+                                .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+                            
+                            // Send the new cropped slicers instead
+                            for (const s of newSlicers) {
+                                await fetchWithTimeout('/processor/enqueue_to_plotter', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ 
+                                        job_id: workflowResult.job_id, 
+                                        slug: s.slug, 
+                                        file_hash: s.hash 
+                                    })
+                                }, FETCH_TIMEOUT);
+                            }
+                            
+                            updateStatus(`Sent ${newSlicers.length} cropped file(s) to plotter`);
+                            state.activeControl = null;
+                            updateUI();
+                            return;
+                        }
+                    }
+                } catch (cropError) {
+                    console.error('Crop error:', cropError);
+                    updateStatus('Crop failed, sending original...');
+                }
+            }
+            
             updateStatus(`Sent ${slicers.length} file(s) to plotter`);
             state.activeControl = null;
             updateUI();
@@ -1062,6 +1284,35 @@
             updateStatus('Plot error'); 
             console.error(e);
         }
+    }
+
+    async function cropImage(imageUrl, crop) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // Calculate crop coordinates
+                const cropX = Math.round((crop.left / 100) * img.width);
+                const cropY = Math.round((crop.top / 100) * img.height);
+                const cropWidth = Math.round(img.width - ((crop.left + crop.right) / 100) * img.width);
+                const cropHeight = Math.round(img.height - ((crop.top + crop.bottom) / 100) * img.height);
+                
+                canvas.width = cropWidth;
+                canvas.height = cropHeight;
+                
+                ctx.drawImage(img, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+                
+                canvas.toBlob((blob) => {
+                    if (blob) resolve(blob);
+                    else reject(new Error('Canvas toBlob failed'));
+                }, 'image/jpeg', 0.9);
+            };
+            img.onerror = () => reject(new Error('Failed to load image'));
+            img.src = imageUrl;
+        });
     }
 
     function updateStatus(text) { elements.status.textContent = text; }
@@ -1082,7 +1333,7 @@
         controls.forEach(control => {
             const btn = document.createElement('button');
             btn.className = 'control-btn';
-            btn.textContent = formatLabel(control);
+            btn.innerHTML = formatLabel(control);
             const isActive = control === state.activeControl;
             const isHovered = control === state.hoveredElement;
             
@@ -1102,21 +1353,26 @@
 
     function formatLabel(control) {
         const labels = {
-            'zoom': `Zoom: ${state.zoomLevel.toFixed(1)}x`,
-            'pan-x': `Pan X: ${state.panX}px`,
-            'pan-y': `Pan Y: ${state.panY}px`,
-            'switch-camera': getCurrentCameraName(),
-            'scroll-timeline': 'Scroll',
-            'process': 'Process',
-            'auto-gallery': `Auto: ${state.autoGallery ? 'ON' : 'OFF'}`,
-            'scroll-images': 'Images',
-            'scroll-workflows': state.workflows[state.currentWorkflowIndex] || 'Style',
-            'send-plotter': 'Plot',
-            'y-start': `Y-Start: ${state.settings.yStart}%`,
-            'y-end': `Y-End: ${state.settings.yEnd}%`,
-            'fullscreen': state.isFullscreen ? 'Exit Full' : 'Fullscreen',
-            'audio-toggle': `Audio: ${state.audioEnabled ? 'ON' : 'OFF'}`,
-            'audio-voice': state.audioVoice.charAt(0).toUpperCase() + state.audioVoice.slice(1)
+            'zoom': `<i class="fas fa-search-plus"></i> ${state.zoomLevel.toFixed(1)}x`,
+            'pan-x': `<i class="fas fa-arrows-alt-h"></i> ${state.panX}`,
+            'pan-y': `<i class="fas fa-arrows-alt-v"></i> ${state.panY}`,
+            'switch-camera': `<i class="fas fa-video"></i> ${getCurrentCameraName()}`,
+            'scroll-timeline': '<i class="fas fa-scroll"></i> Scroll',
+            'process': '<i class="fas fa-magic"></i> Process',
+            'auto-gallery': `<i class="fas fa-sync"></i> ${state.autoGallery ? 'ON' : 'OFF'}`,
+            'scroll-images': '<i class="fas fa-images"></i> Img',
+            'scroll-workflows': `<i class="fas fa-palette"></i> ${state.workflows[state.currentWorkflowIndex] || 'Style'}`,
+            'send-plotter': '<i class="fas fa-pen-nib"></i> Plot',
+            'y-start': `<i class="fas fa-arrows-alt-v"></i> Y1:${state.settings.yStart}%`,
+            'y-end': `<i class="fas fa-arrows-alt-v"></i> Y2:${state.settings.yEnd}%`,
+            'fullscreen': state.isFullscreen ? '<i class="fas fa-compress"></i>' : '<i class="fas fa-expand"></i>',
+            'audio-toggle': `<i class="fas fa-microphone${state.audioEnabled ? '' : '-slash'}"></i> ${state.audioEnabled ? 'ON' : 'OFF'}`,
+            'audio-voice': `<i class="fas fa-robot"></i> ${state.audioVoice.charAt(0).toUpperCase() + state.audioVoice.slice(1)}`,
+            'crop-left': `<i class="fas fa-chevron-left"></i> L:${state.crop.left}%`,
+            'crop-right': `<i class="fas fa-chevron-right"></i> R:${state.crop.right}%`,
+            'crop-top': `<i class="fas fa-chevron-up"></i> T:${state.crop.top}%`,
+            'crop-bottom': `<i class="fas fa-chevron-down"></i> B:${state.crop.bottom}%`,
+            'reset-crop': '<i class="fas fa-undo"></i> Reset'
         };
         return labels[control] || control;
     }

@@ -15,36 +15,60 @@
 
 {% block content %}
 <div id="huid-wrapper">
-    <div id="huid-container">
-        <!-- Camera always visible in background - full screen -->
-        <video id="camera-video" autoplay playsinline></video>
-        <canvas id="capture-canvas"></canvas>
-        
-        <!-- Overlay for timeline/gallery images -->
-        <img id="overlay-image" src="" alt="Overlay">
-        
-        <!-- UI Container - constrained by Y boundaries -->
-        <div id="ui-container">
-            <!-- Top Bar - Mode Selection -->
-            <div id="top-bar">
-                <button class="mode-btn" id="mode-camera" data-mode="camera">Camera</button>
-                <button class="mode-btn" id="mode-timeline" data-mode="timeline">Timeline</button>
-                <button class="mode-btn" id="mode-gallery" data-mode="gallery">Gallery</button>
-                <button class="mode-btn" id="mode-audio" data-mode="audio">Audio</button>
-                <button class="mode-btn" id="mode-settings" data-mode="settings">Settings</button>
-                <button class="mode-btn" id="mode-lock" data-mode="lock">Lock</button>
+    <!-- Content Bounds - Everything stays inside this container -->
+    <div id="content-bounds">
+        <div id="huid-container">
+            <!-- Camera always visible in background - full screen within bounds -->
+            <video id="camera-video" autoplay playsinline></video>
+            <canvas id="capture-canvas"></canvas>
+            
+            <!-- Overlay for timeline/gallery images - inside bounds -->
+            <div id="overlay-container">
+                <img id="overlay-image" src="" alt="Overlay">
+                <!-- Crop visualization overlay -->
+                <div id="crop-overlay" style="display: none;">
+                    <div class="crop-mask-top"></div>
+                    <div class="crop-mask-bottom"></div>
+                    <div class="crop-mask-left"></div>
+                    <div class="crop-mask-right"></div>
+                </div>
             </div>
             
-            <!-- Status Overlay - positioned below top bar -->
-            <div class="status-overlay" id="status-text"></div>
-            
-            <!-- Timeline Progress Bar -->
-            <div class="timeline-bar" id="timeline-bar">
-                <div class="timeline-progress" id="timeline-progress"></div>
+            <!-- UI Container -->
+            <div id="ui-container">
+                <!-- Top Bar - Mode Selection -->
+                <div id="top-bar">
+                    <button class="mode-btn" id="mode-camera" data-mode="camera" title="Camera">
+                        <i class="fas fa-camera"></i>
+                    </button>
+                    <button class="mode-btn" id="mode-timeline" data-mode="timeline" title="Timeline">
+                        <i class="fas fa-history"></i>
+                    </button>
+                    <button class="mode-btn" id="mode-gallery" data-mode="gallery" title="Gallery">
+                        <i class="fas fa-images"></i>
+                    </button>
+                    <button class="mode-btn" id="mode-audio" data-mode="audio" title="Audio">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+                    <button class="mode-btn" id="mode-settings" data-mode="settings" title="Settings">
+                        <i class="fas fa-sliders-h"></i>
+                    </button>
+                    <button class="mode-btn" id="mode-lock" data-mode="lock" title="Lock">
+                        <i class="fas fa-lock"></i>
+                    </button>
+                </div>
+                
+                <!-- Status Overlay - positioned below top bar -->
+                <div class="status-overlay" id="status-text"></div>
+                
+                <!-- Timeline Progress Bar -->
+                <div class="timeline-bar" id="timeline-bar">
+                    <div class="timeline-progress" id="timeline-progress"></div>
+                </div>
+                
+                <!-- Bottom Bar - Context Controls (populated by JS) -->
+                <div id="bottom-bar"></div>
             </div>
-            
-            <!-- Bottom Bar - Context Controls (populated by JS) -->
-            <div id="bottom-bar"></div>
         </div>
     </div>
 </div>

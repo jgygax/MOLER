@@ -16,6 +16,7 @@ from flask import (
 from werkzeug.utils import secure_filename
 from pathlib import Path
 from datetime import datetime
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 processor_bp = Blueprint("processor", __name__)
@@ -69,6 +70,30 @@ def upload_image():
     extension = os.path.splitext(filename)[1]
     original_path = os.path.join(image_dir, f"original{extension}")
     file.save(original_path)
+
+    # Apply crop if crop parameters are provided
+    crop_left = request.form.get('crop_left', type=float, default=0)
+    crop_top = request.form.get('crop_top', type=float, default=0)
+    crop_right = request.form.get('crop_right', type=float, default=0)
+    crop_bottom = request.form.get('crop_bottom', type=float, default=0)
+
+    has_crop = crop_left > 0 or crop_top > 0 or crop_right > 0 or crop_bottom > 0
+    if has_crop:
+        try:
+            with Image.open(original_path) as img:
+                width, height = img.size
+                # Calculate crop box in pixels from percentages
+                left = int((crop_left / 100) * width)
+                top = int((crop_top / 100) * height)
+                right = width - int((crop_right / 100) * width)
+                bottom = height - int((crop_bottom / 100) * height)
+                # Ensure valid crop box
+                if right > left and bottom > top:
+                    cropped = img.crop((left, top, right, bottom))
+                    cropped.save(original_path, quality=95)
+        except Exception as e:
+            print(f"Crop error: {e}")
+            # Continue with uncropped image on error
 
     # Initialize metadata
     metadata = {
@@ -175,6 +200,7 @@ def run_workflow():
     workflows = {
         "clean": [
             {"stage": "rmbg"},
+            # {"stage": "face_detection", "params": {"margin_mm": 20}},
             # {"stage": "add_logo"},
             # {"stage": "slicer", "params": {"scale": 0.85, "min_width": 0.1}},
             {
@@ -193,6 +219,7 @@ def run_workflow():
         ],
         "kawaii": [
             {"stage": "rmbg"},
+            # {"stage": "face_detection", "params": {"margin_mm": 20}},
             # {"stage": "add_logo"},
             # {"stage": "slicer", "params": {"min_width": 1}},
             {
@@ -211,6 +238,7 @@ def run_workflow():
         ],
         "realistic": [
             {"stage": "rmbg"},
+            # {"stage": "face_detection", "params": {"margin_mm": 20}},
             # {"stage": "add_logo"},
             # {"stage": "slicer", "params": {"min_width": 1}},
             {
@@ -231,6 +259,7 @@ def run_workflow():
             # {"stage": "rmbg"},
             # {"stage": "add_logo"},
             # {"stage": "slicer", "params": {"min_width": 1}},
+            # {"stage": "face_detection", "params": {"margin_mm": 20}},
             {
                 "stage": "i2i",
                 "params": {

@@ -33,39 +33,14 @@ os.makedirs(AUDIO_MOCK_FOLDER, exist_ok=True)
 
 # Voice effect presets (FFmpeg + SoX filter chains)
 VOICE_PRESETS = {
-    "dalek": {
-        "name": "Dalek",
-        "description": "Metallic robotic voice with ring modulation",
+    "pitch_up": {
+        "name": "Pitch Up",
+        "description": "Pitch shift one octave up",
         "ffmpeg_filters": [
-            "highpass=f=80",  # Remove low rumble
-            "arnndn",  # RNNoise noise suppression
-            "vibrato=f=4:d=0.5",  # 4Hz vibrato
-            "aecho=0.8:0.9:50|60:0.4|0.3",  # Metallic echo
+            "aresample=16000",  # Resample to 16kHz
         ],
-        "sox_pitch": -300,  # Slightly deeper
+        "sox_pitch": 1200,  # One octave up (1200 cents)
         "sox_tempo": 1.0,
-    },
-    "walle": {
-        "name": "Wall-E",
-        "description": "Cute high-pitched robotic voice",
-        "ffmpeg_filters": [
-            "highpass=f=200",  # Remove lows
-            "arnndn",  # Noise suppression
-            "aecho=0.6:0.8:20:0.3",  # Short robotic echo
-        ],
-        "sox_pitch": 800,  # Much higher pitch
-        "sox_tempo": 1.2,  # Slightly faster
-    },
-    "evil": {
-        "name": "Evil",
-        "description": "Deep demonic voice with reverb",
-        "ffmpeg_filters": [
-            "arnndn",  # Noise suppression
-            "lowpass=f=3000",  # Darken voice
-            "aecho=0.9:0.8:500|600:0.5|0.4",  # Long reverb
-        ],
-        "sox_pitch": -600,  # Much deeper
-        "sox_tempo": 0.85,  # Slower
     },
 }
 
@@ -77,7 +52,7 @@ sessions_lock = threading.Lock()
 class AudioSession:
     """Manages an audio streaming session with effect processing"""
     
-    def __init__(self, session_id, voice_preset="dalek"):
+    def __init__(self, session_id, voice_preset="pitch_up"):
         self.session_id = session_id
         self.voice_preset = voice_preset
         self.ffmpeg_proc = None
@@ -97,37 +72,67 @@ class AudioSession:
             logger.info(f"Audio session {self.session_id} started with preset: {self.voice_preset} (waiting for first chunk to detect sample rate)")
     
     def _start_mock_pipeline(self, preset):
-        """Start pipeline that saves to file (for Docker testing)"""
-        # Generate unique filename
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        self.mock_file = Path(AUDIO_MOCK_FOLDER) / f"audio_{self.session_id}_{timestamp}.wav"
-        
-        # Build FFmpeg filter chain with resampling - use only basic filters that are always available
-        ffmpeg_filters = [f"aresample={SAMPLE_RATE}"]  # Resample to 16kHz first
-        # Add preset filters but skip rnndn if not available
-        for f in preset["ffmpeg_filters"]:
-            if f != "arnndn":  # Skip RNNoise filter as it may not be available
-                ffmpeg_filters.append(f)
-        ffmpeg_filter_str = ",".join(ffmpeg_filters)
-        
-        # FFmpeg: raw PCM input → resample → filters → WAV file
+        """Start pipeline that plays to speakers"""
+        # Build FFmpeg filter chain - just pass through resampled audio
         ffmpeg_cmd = [
             "ffmpeg",
-            "-y",  # Overwrite output
-            "-f", "s16le",  # Raw PCM 16-bit little-endian
-            "-ar", str(self.input_sample_rate),  # Input sample rate from browser
+            "-f", "s16le",
+            "-ar", str(self.input_sample_rate),
             "-ac", str(CHANNELS),
-            "-i", "-",  # Read from stdin
-            "-af", ffmpeg_filter_str,
-            "-f", "wav",
-            str(self.mock_file)
+            "-i", "-",
+            "-af", f"aresample={SAMPLE_RATE}",
+            "-f", "s16le",
+            "-ar", str(SAMPLE_RATE),
+            "-ac", str(CHANNELS),
+            "-"
         ]
         
-        logger.info(f"Starting mock audio pipeline (input: {self.input_sample_rate}Hz), saving to: {self.mock_file}")
-        logger.debug(f"FFmpeg command: {' '.join(ffmpeg_cmd)}")
+        # SoX for pitch shift
+        sox_pitch = preset.get("sox_pitch", 0)
+        sox_cmd = [
+            "sox",
+            "-t", "raw",
+            "-r", str(SAMPLE_RATE),
+            "-b", "16",
+            "-e", "signed",
+            "-c", str(CHANNELS),
+            "-",
+            "-t", "raw",
+            "-r", str(SAMPLE_RATE),
+            "-b", "16",
+            "-e", "signed",
+            "-c", str(CHANNELS),
+            "-",
+            "pitch", str(sox_pitch),
+        ]
+        
+        # Play through default audio output
+        aplay_cmd = ["aplay", "-f", "S16_LE", "-r", str(SAMPLE_RATE), "-c", str(CHANNELS)]
+        
+        logger.info(f"Starting audio pipeline (input: {self.input_sample_rate}Hz) with pitch shift: {sox_pitch}cents")
+        
+        # Start FFmpeg
         self.ffmpeg_proc = subprocess.Popen(
             ffmpeg_cmd,
             stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=CHUNK_BYTES * 4
+        )
+        
+        # Start SoX
+        self.sox_proc = subprocess.Popen(
+            sox_cmd,
+            stdin=self.ffmpeg_proc.stdout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=CHUNK_BYTES * 4
+        )
+        
+        # Start aplay
+        self.aplay_proc = subprocess.Popen(
+            aplay_cmd,
+            stdin=self.sox_proc.stdout,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             bufsize=CHUNK_BYTES * 4
@@ -225,7 +230,7 @@ class AudioSession:
             # Start pipeline on first chunk with detected sample rate
             if self.ffmpeg_proc is None:
                 self.input_sample_rate = input_sample_rate
-                preset = VOICE_PRESETS.get(self.voice_preset, VOICE_PRESETS["dalek"])
+                preset = VOICE_PRESETS.get(self.voice_preset, VOICE_PRESETS["pitch_up"])
                 
                 if IS_MOCK_MODE:
                     self._start_mock_pipeline(preset)
@@ -263,9 +268,7 @@ class AudioSession:
         with self.lock:
             self._stop_pipeline()
             self.is_active = False
-            
-            if IS_MOCK_MODE and self.mock_file:
-                logger.info(f"Mock audio saved to: {self.mock_file}")
+            logger.info(f"Audio session {self.session_id} stopped")
     
     def _stop_pipeline(self):
         """Stop FFmpeg/SoX/aplay processes"""
@@ -326,7 +329,7 @@ class AudioNamespace(Namespace):
     def on_start_stream(self, data):
         """Start audio streaming"""
         session_id = request.sid
-        voice_preset = data.get("preset", "dalek")
+        voice_preset = data.get("preset", "pitch_up")
         
         logger.info(f"Starting audio stream for {session_id} with preset: {voice_preset}")
         
@@ -361,7 +364,7 @@ class AudioNamespace(Namespace):
     def on_change_preset(self, data):
         """Change voice preset"""
         session_id = request.sid
-        new_preset = data.get("preset", "dalek")
+        new_preset = data.get("preset", "pitch_up")
         
         with sessions_lock:
             if session_id in active_sessions:
