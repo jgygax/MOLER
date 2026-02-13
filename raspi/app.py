@@ -26,6 +26,7 @@ from blueprints.audio import (
     audio_bp,
     start_background_threads as start_audio_threads,
 )
+from blueprints.soundboard import soundboard_bp, init_sfx_player
 
 load_dotenv()
 
@@ -51,6 +52,7 @@ app.register_blueprint(processor_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(huid_bp)
 app.register_blueprint(audio_bp)
+app.register_blueprint(soundboard_bp)
 
 @app.route("/")
 def home():
@@ -70,6 +72,10 @@ if not extensions.plotter_instance:
         extensions.led_controller = MultiLEDController()
         extensions.led_controller.start()
         logger.info("MultiLEDController initialized and started")
+
+        # Initialize SFX Player
+        init_sfx_player()
+        logger.info("SFX Player initialized and started")
     except Exception as e:
         logger.error(f"Could not initialize VPlotter: {e}")
         extensions.plotter_instance = None

@@ -27,6 +27,11 @@
                 <i class="fas fa-robot"></i>
                 <span class="nav-label">AI Lab</span>
             </a>
+            <a href="{{ url_for('soundboard.index') }}"
+                class="{{ 'active' if request.endpoint and 'soundboard' in request.endpoint }}" title="Sound Board">
+                <i class="fas fa-music"></i>
+                <span class="nav-label">Sound Board</span>
+            </a>
             <a href="{{ url_for('settings.index') }}"
                 class="{{ 'active' if request.endpoint and 'settings' in request.endpoint }}" title="Settings">
                 <i class="fas fa-cog"></i>

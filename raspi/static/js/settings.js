@@ -1,6 +1,7 @@
 // Settings management
 let currentSettings = {};
 let ledSettings = {};
+let audioSettings = {};
 
 // Presets configuration - easy to add more
 const PRESETS = {
@@ -24,6 +25,7 @@ const PRESETS = {
 document.addEventListener('DOMContentLoaded', () => {
     loadSettings();
     loadLedSettings();
+    loadAudioSettings();
 });
 
 async function loadSettings() {
@@ -97,14 +99,14 @@ async function saveLedSettings() {
         innenlicht_enabled: document.getElementById('innenlicht-toggle').checked,
         brightness: parseInt(document.getElementById('led-brightness').value) / 100
     };
-    
+
     try {
         const response = await fetch('/settings/led', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(settings)
         });
-        
+
         const result = await response.json();
         if (result.status === 'ok') {
             ledSettings = result.settings;
@@ -114,6 +116,93 @@ async function saveLedSettings() {
         }
     } catch (error) {
         showStatus('Error saving LED settings: ' + error.message, true);
+    }
+}
+
+async function loadAudioSettings() {
+    try {
+        const response = await fetch('/settings/audio');
+        audioSettings = await response.json();
+        updateAudioUIFromSettings();
+    } catch (error) {
+        console.error('Error loading audio settings:', error);
+    }
+}
+
+function updateAudioUIFromSettings() {
+    const enabledToggle = document.getElementById('audio-enabled-toggle');
+    const volumeSlider = document.getElementById('audio-volume');
+    const volumeValue = document.getElementById('audio-volume-value');
+    const idleFreqInput = document.getElementById('audio-idle-freq');
+    const plottingFreqInput = document.getElementById('audio-plotting-freq');
+
+    if (enabledToggle) {
+        enabledToggle.checked = audioSettings.enabled;
+    }
+    if (volumeSlider) {
+        volumeSlider.value = audioSettings.volume;
+        volumeValue.textContent = audioSettings.volume + '%';
+    }
+    if (idleFreqInput) {
+        idleFreqInput.value = audioSettings.idle_frequency;
+    }
+    if (plottingFreqInput) {
+        plottingFreqInput.value = audioSettings.plotting_frequency;
+    }
+
+    // Add event listeners for audio controls
+    if (enabledToggle) {
+        enabledToggle.addEventListener('change', async () => {
+            await saveAudioSettings();
+        });
+    }
+
+    if (volumeSlider) {
+        volumeSlider.addEventListener('input', (e) => {
+            volumeValue.textContent = e.target.value + '%';
+        });
+        volumeSlider.addEventListener('change', async () => {
+            await saveAudioSettings();
+        });
+    }
+
+    if (idleFreqInput) {
+        idleFreqInput.addEventListener('change', async () => {
+            await saveAudioSettings();
+        });
+    }
+
+    if (plottingFreqInput) {
+        plottingFreqInput.addEventListener('change', async () => {
+            await saveAudioSettings();
+        });
+    }
+}
+
+async function saveAudioSettings() {
+    const settings = {
+        enabled: document.getElementById('audio-enabled-toggle').checked,
+        volume: parseInt(document.getElementById('audio-volume').value),
+        idle_frequency: parseInt(document.getElementById('audio-idle-freq').value),
+        plotting_frequency: parseInt(document.getElementById('audio-plotting-freq').value)
+    };
+
+    try {
+        const response = await fetch('/settings/audio', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings)
+        });
+
+        const result = await response.json();
+        if (result.status === 'ok') {
+            audioSettings = result.settings;
+            showStatus('Audio settings saved');
+        } else {
+            showStatus('Error: ' + result.error, true);
+        }
+    } catch (error) {
+        showStatus('Error saving audio settings: ' + error.message, true);
     }
 }
 

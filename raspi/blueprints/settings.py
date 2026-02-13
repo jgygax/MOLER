@@ -1,7 +1,7 @@
 import logging
 from flask import Blueprint, render_template, request, jsonify
 import extensions
-from settings_storage import save_settings
+from settings_storage import save_settings, get_current_audio_volume, set_audio_volume
 
 logger = logging.getLogger(__name__)
 settings_bp = Blueprint("settings", __name__)
@@ -124,27 +124,75 @@ def led_settings_api():
     """API endpoint to get or update LED settings."""
     if request.method == "GET":
         return jsonify(extensions.led_settings)
-    
+
     elif request.method == "POST":
         data = request.json
         if not data:
             return jsonify({"error": "No data provided"}), 400
-        
+
         # Update innenlicht toggle
         if "innenlicht_enabled" in data:
             extensions.led_settings["innenlicht_enabled"] = bool(data["innenlicht_enabled"])
-        
+
         # Update brightness (0.0 to 1.0)
         if "brightness" in data:
             brightness = float(data["brightness"])
             extensions.led_settings["brightness"] = max(0.0, min(1.0, brightness))
-        
+
         logger.info(f"LED settings updated: {extensions.led_settings}")
-        
+
         # Persist LED settings to disk
         save_settings(led_settings=extensions.led_settings)
-        
+
         return jsonify({
             "status": "ok",
             "settings": extensions.led_settings
+        })
+
+
+@settings_bp.route("/settings/audio", methods=["GET", "POST"])
+def audio_settings_api():
+    """API endpoint to get or update audio settings."""
+    if request.method == "GET":
+        # Get current system volume if available
+        current_volume = get_current_audio_volume()
+        response_settings = extensions.audio_settings.copy()
+        if current_volume is not None:
+            response_settings["volume"] = current_volume
+        return jsonify(response_settings)
+
+    elif request.method == "POST":
+        data = request.json
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        # Update enabled toggle
+        if "enabled" in data:
+            extensions.audio_settings["enabled"] = bool(data["enabled"])
+
+        # Update volume (0 to 100)
+        if "volume" in data:
+            volume = int(data["volume"])
+            extensions.audio_settings["volume"] = max(0, min(100, volume))
+            # Apply volume to system
+            set_audio_volume(volume)
+
+        # Update idle frequency (seconds, min 5, max 300)
+        if "idle_frequency" in data:
+            freq = int(data["idle_frequency"])
+            extensions.audio_settings["idle_frequency"] = max(5, min(300, freq))
+
+        # Update plotting frequency (seconds, min 1, max 120)
+        if "plotting_frequency" in data:
+            freq = int(data["plotting_frequency"])
+            extensions.audio_settings["plotting_frequency"] = max(1, min(120, freq))
+
+        logger.info(f"Audio settings updated: {extensions.audio_settings}")
+
+        # Persist audio settings to disk
+        save_settings(audio_settings=extensions.audio_settings)
+
+        return jsonify({
+            "status": "ok",
+            "settings": extensions.audio_settings
         })

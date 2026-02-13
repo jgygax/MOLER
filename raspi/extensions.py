@@ -1,5 +1,5 @@
 import threading
-from settings_storage import load_settings, DEFAULT_VPLOTTER_SETTINGS, DEFAULT_LED_SETTINGS
+from settings_storage import load_settings, DEFAULT_VPLOTTER_SETTINGS, DEFAULT_LED_SETTINGS, DEFAULT_AUDIO_SETTINGS
 
 # Shared Locks and Lists
 job_lock = threading.Lock()
@@ -24,3 +24,9 @@ vplotter_settings = _persisted_settings["vplotter"]
 
 # LED Settings Storage (loaded from disk or defaults)
 led_settings = _persisted_settings["led"]
+
+# Audio Settings Storage (loaded from disk or defaults)
+audio_settings = _persisted_settings["audio"]
+
+# SFX Player instance (initialized in app.py)
+sfx_player = None
