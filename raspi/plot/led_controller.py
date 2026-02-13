@@ -260,135 +260,167 @@ class MultiLEDController:
                 r, g, b = 5, 5, 20
             
             self.set_pixel(self.strip_main, led_idx, r, g, b)
-    
+        
     def warm_lamp_effect(self, zone, t):
-        """Schublade - Pulsating warm lamp with left-to-right wave, more white/yellow"""
+        """Schublade - Pulsating warm lamp with left-to-right wave, more warm"""
         start, end = zone["start"], zone["end"]
         count = zone["count"]
         
-        # Slow pulsation moving left to right
-        wave_pos = (math.sin(t * 1.5) * 0.5 + 0.5)  # Position of brightest point (0-1)
+        # Slower pulsation moving left to right
+        wave_pos = (math.sin(t * 1.0) * 0.5 + 0.5)  # Position of brightest point (0-1)
         
         for i in range(count):
             # Calculate distance from wave peak
             pos = i / count
             dist = abs(pos - wave_pos)
             
-            # Intensity falls off with distance from wave
-            intensity = max(0.6, 1.0 - dist * 0.5)
+            # Intensity falls off with distance from wave - stronger pulsation
+            intensity = max(0.5, 1.0 - dist * 0.8)
             
             # Small random flicker
             flicker = random.uniform(0.97, 1.0)
             intensity *= flicker
             
-            # Warmer colors with more white/yellow
-            # More yellow/gold tones
+            # Warmer, more orange tones
             r = int(255 * intensity)
-            g = int(180 * intensity)  # More yellow
-            b = int(60 * intensity)   # More white/warm
+            g = int(140 * intensity)  # More orange
+            b = int(30 * intensity)   # Less blue for warmer feel
             
             self.set_pixel(self.strip_main, start + i, r, g, b)
-    
+
+    def starry_night_effect(self, zone, t):
+        """Van Gogh - Wilder Starry Night Effect with distinct yellow/blue streaks"""
+        start, end = zone["start"], zone["end"]
+        for i in range(start, end + 1):
+            offset = (i - start) / zone["count"]
+            
+            # Multiple frequency waves for streaks
+            long_yellow = math.sin(t * 1.5 + offset * 3.14) * 0.5 + 0.5
+            long_blue = math.sin(t * 1.3 + offset * 3.14 + 1.57) * 0.5 + 0.5
+            short_yellow = math.sin(t * 2.5 + offset * 12.56) * 0.5 + 0.5
+            short_blue = math.sin(t * 2.8 + offset * 12.56 + 1.57) * 0.5 + 0.5
+            
+            # Determine which streak is dominant
+            streaks = [
+                (long_yellow, "yellow"),
+                (long_blue, "blue"),
+                (short_yellow, "yellow"),
+                (short_blue, "blue")
+            ]
+            
+            max_val, color_type = max(streaks, key=lambda x: x[0])
+            
+            if color_type == "yellow":
+                # Bright golden yellow streaks
+                r = int(255 * max_val)
+                g = int(200 + 55 * max_val)
+                b = int(20 + 30 * max_val)
+            else:
+                # Deep vibrant blue streaks
+                r = int(5 + 15 * max_val)
+                g = int(30 + 70 * max_val)
+                b = int(120 + 135 * max_val)
+            
+            self.set_pixel(self.strip_main, i, r, g, b)
+
     def fire_effect(self, zone, heat_array):
-        """Dia-Filter - Fire Effect (dimmer, no white)"""
+        """Dia-Filter - Smoother, more orange-warm fire effect"""
         start, end = zone["start"], zone["end"]
         count = zone["count"]
         
-        # Cool down
+        # Cool down - slower for smoother effect
         for i in range(count):
-            cooldown = random.randint(0, 25)
+            cooldown = random.randint(0, 15)  # Reduced from 25
             if cooldown > heat_array[i]:
                 heat_array[i] = 0
             else:
                 heat_array[i] = heat_array[i] - cooldown
         
+        # Heat diffusion for smoother flames
+        for i in range(1, count - 1):
+            heat_array[i] = (heat_array[i - 1] + heat_array[i] + heat_array[i + 1]) // 3
+        
         # Randomly ignite new sparks
         if random.randint(0, 255) < 120:
-            heat_array[random.randint(0, count - 1)] = random.randint(150, 220)
+            heat_array[random.randint(0, count - 1)] = random.randint(160, 230)
         
-        # Convert heat to colors (capped at yellow, no white)
+        # Convert heat to warm orange/yellow colors
         for i in range(count):
             heat = heat_array[i]
-            if heat > 150:  # Yellow
-                r, g, b = 200, int((heat - 50) * 1.2), 0
-            elif heat > 80:  # Orange
-                r, g, b = int(heat * 1.8), int((heat - 80) * 1.5), 0
-            else:  # Red
-                r, g, b = int(heat * 2.0), 0, 0
+            if heat > 180:  # Bright orange-yellow
+                r, g, b = 255, int(140 + (heat - 180) * 1.5), int(20 + (heat - 180) * 0.3)
+            elif heat > 100:  # Orange
+                r, g, b = int(200 + heat * 0.27), int(80 + heat * 0.6), 0
+            elif heat > 40:  # Dark orange-red
+                r, g, b = int(heat * 2.2), int(heat * 0.8), 0
+            else:  # Deep red ember
+                r, g, b = int(heat * 2.5), 0, 0
             
             self.set_pixel(self.strip_main, start + i, r, g, b)
-    
+
     def laser_effect(self, zone, charge, active, cooldown):
-        """Dalek Horn - Slower shooting with glow buildup before discharge"""
+        """Dalek Horn - More frequent shooting with glow buildup before discharge"""
         start, end = zone["start"], zone["end"]
         count = zone["count"]
         
         if not active:
             # Idle state with glow buildup effect
-            # Base glow that pulses as it charges
-            base_glow = int(5 + charge * 50)  # 5-55 as it charges
+            base_glow = int(5 + charge * 50)
             
             for i in range(count):
                 self.set_pixel(self.strip_main, start + i, base_glow, 0, 0)
             
-            # Random chance to start charging (less frequent than before)
-            if cooldown <= 0 and random.random() < 0.005:  # 0.5% chance per frame
-                return 0.0, False, 0  # Start charging
+            # More frequent shooting
+            if cooldown <= 0 and random.random() < 0.02:  # Increased from 0.005 to 2% chance
+                return 0.0, False, 0
             
             # Continue charging
             if cooldown <= 0:
-                charge += 0.02  # Slow charge buildup
+                charge += 0.02
                 if charge >= 1.0:
                     charge = 1.0
-                    return charge, True, 0  # Discharge!
+                    return charge, True, 0
             
             return charge, False, max(0, cooldown - DELAY)
         
         else:
-            # Discharge animation - slower movement
-            # charge goes from 1.0 to 0.0 during discharge
+            # Discharge animation
             discharge_progress = charge
             position = int((1.0 - discharge_progress) * count)
             
             for i in range(count):
                 if i == position:
-                    # Bright laser point at max charge brightness
                     r, g, b = 255, int(100 * discharge_progress), int(100 * discharge_progress)
                 elif abs(i - position) == 1:
-                    # Trailing glow
                     trail = int(150 * discharge_progress)
                     r, g, b = trail, int(trail * 0.3), int(trail * 0.3)
                 else:
-                    # Fading glow based on charge
                     glow = int(20 * discharge_progress)
                     r, g, b = glow, 0, 0
                 
                 self.set_pixel(self.strip_main, start + i, r, g, b)
             
-            # Decay charge for slower movement
-            charge -= 0.08  # Slower discharge
+            charge -= 0.08
             
-            # Check if shot completed
             if charge <= 0:
-                return 0.0, False, random.uniform(2.0, 6.0)  # Cooldown 2-6 seconds
+                return 0.0, False, random.uniform(1.0, 3.0)  # Shorter cooldown: 1-3 seconds
             
             return charge, True, 0
-    
+
     def dimmed_white_effect(self, zone):
-        """Innenlicht - Dimmed White (toggleable)"""
+        """Innenlicht - Full brightness white (toggleable)"""
         if not self._is_innenlicht_enabled():
-            # Turned off
             start, end = zone["start"], zone["end"]
             for i in range(start, end + 1):
                 self.set_pixel(self.strip_main, i, 0, 0, 0)
             return
         
         start, end = zone["start"], zone["end"]
-        r, g, b = 100, 100, 90  # Slightly warm white, dimmed
+        r, g, b = 255, 255, 240  # Full brightness, slightly warm white
         
         for i in range(start, end + 1):
             self.set_pixel(self.strip_main, i, r, g, b)
-    
+
     def pulsating_teal_effect(self, zone, pulse):
         """Belly - Soft Pulsating Dark Teal"""
         start, end = zone["start"], zone["end"]

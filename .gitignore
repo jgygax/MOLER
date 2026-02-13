@@ -6,3 +6,5 @@ plot_patterns
 uploads
 job_history.json
 audio_tests
+test_*
+settings.json

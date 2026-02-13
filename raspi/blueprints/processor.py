@@ -202,7 +202,7 @@ def run_workflow():
             {"stage": "rmbg"},
             # {"stage": "face_detection", "params": {"margin_mm": 20}},
             # {"stage": "add_logo"},
-            # {"stage": "slicer", "params": {"scale": 0.85, "min_width": 0.1}},
+            # {"stage": "slicer", "params": {"scale": 1, "min_width": 0.1}},
             {
                 "stage": "i2i",
                 "params": {
@@ -213,7 +213,7 @@ def run_workflow():
             {"stage": "centerline"},
             {
                 "stage": "slicer",
-                "params": {"scale": 0.85, "min_width": 1, "taper_length_mm": 40},
+                "params": {"scale": 1, "min_width": 1, "taper_length_mm": 40},
             },
             {"stage": "visualizer"},
         ],
@@ -232,7 +232,7 @@ def run_workflow():
             {"stage": "centerline"},
             {
                 "stage": "slicer",
-                "params": {"scale": 0.85, "min_width": 1, "taper_length_mm": 40},
+                "params": {"scale": 1, "min_width": 1, "taper_length_mm": 40},
             },
             {"stage": "visualizer"},
         ],
@@ -251,7 +251,7 @@ def run_workflow():
             {"stage": "centerline"},
             {
                 "stage": "slicer",
-                "params": {"scale": 0.85, "min_width": 1, "taper_length_mm": 40},
+                "params": {"scale": 1, "min_width": 1, "taper_length_mm": 40},
             },
             {"stage": "visualizer"},
         ],
@@ -270,7 +270,7 @@ def run_workflow():
             {"stage": "centerline"},
             {
                 "stage": "slicer",
-                "params": {"scale": 0.85, "min_width": 1, "taper_length_mm": 40},
+                "params": {"scale": 1, "min_width": 1, "taper_length_mm": 40},
             },
             {"stage": "visualizer"},
         ],
