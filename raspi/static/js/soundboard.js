@@ -130,6 +130,24 @@ function clearPlayingState() {
     }
 }
 
+async function stopPlayback() {
+    try {
+        const response = await fetch('/soundboard/api/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'stopped') {
+            clearPlayingState();
+        }
+    } catch (error) {
+        console.error('Error stopping playback:', error);
+        showError('Failed to stop playback');
+    }
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
