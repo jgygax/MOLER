@@ -187,6 +187,11 @@ def audio_settings_api():
             freq = int(data["plotting_frequency"])
             extensions.audio_settings["plotting_frequency"] = max(1, min(120, freq))
 
+        # Update Dalek voice effect intensity (0 to 100)
+        if "dalek_intensity" in data:
+            intensity = int(data["dalek_intensity"])
+            extensions.audio_settings["dalek_intensity"] = max(0, min(100, intensity))
+
         logger.info(f"Audio settings updated: {extensions.audio_settings}")
 
         # Persist audio settings to disk

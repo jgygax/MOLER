@@ -35,6 +35,7 @@ DEFAULT_AUDIO_SETTINGS = {
     "volume": 50,  # 0 to 100
     "idle_frequency": 30,  # Expected seconds between sounds when idle
     "plotting_frequency": 10,  # Expected seconds between sounds when plotting
+    "dalek_intensity": 50,  # 0 to 100 - Dalek voice effect intensity
 }
 
 

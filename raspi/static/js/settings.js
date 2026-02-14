@@ -135,6 +135,8 @@ function updateAudioUIFromSettings() {
     const volumeValue = document.getElementById('audio-volume-value');
     const idleFreqInput = document.getElementById('audio-idle-freq');
     const plottingFreqInput = document.getElementById('audio-plotting-freq');
+    const dalekSlider = document.getElementById('dalek-intensity');
+    const dalekValue = document.getElementById('dalek-intensity-value');
 
     if (enabledToggle) {
         enabledToggle.checked = audioSettings.enabled;
@@ -148,6 +150,10 @@ function updateAudioUIFromSettings() {
     }
     if (plottingFreqInput) {
         plottingFreqInput.value = audioSettings.plotting_frequency;
+    }
+    if (dalekSlider) {
+        dalekSlider.value = audioSettings.dalek_intensity || 50;
+        dalekValue.textContent = (audioSettings.dalek_intensity || 50) + '%';
     }
 
     // Add event listeners for audio controls
@@ -177,6 +183,15 @@ function updateAudioUIFromSettings() {
             await saveAudioSettings();
         });
     }
+
+    if (dalekSlider) {
+        dalekSlider.addEventListener('input', (e) => {
+            dalekValue.textContent = e.target.value + '%';
+        });
+        dalekSlider.addEventListener('change', async () => {
+            await saveAudioSettings();
+        });
+    }
 }
 
 async function saveAudioSettings() {
@@ -184,7 +199,8 @@ async function saveAudioSettings() {
         enabled: document.getElementById('audio-enabled-toggle').checked,
         volume: parseInt(document.getElementById('audio-volume').value),
         idle_frequency: parseInt(document.getElementById('audio-idle-freq').value),
-        plotting_frequency: parseInt(document.getElementById('audio-plotting-freq').value)
+        plotting_frequency: parseInt(document.getElementById('audio-plotting-freq').value),
+        dalek_intensity: parseInt(document.getElementById('dalek-intensity').value)
     };
 
     try {
