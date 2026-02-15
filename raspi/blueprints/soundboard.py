@@ -243,9 +243,9 @@ def _play_audio_file(filepath):
         with active_playback_lock:
             active_playback_processes.append((ffmpeg_proc, aplay_proc))
 
-        # Wait for aplay to finish
-        aplay_returncode = aplay_proc.wait()
-        ffmpeg_returncode = ffmpeg_proc.wait()
+        # Wait for aplay to finish (with generous timeout for slow systems)
+        aplay_returncode = aplay_proc.wait(timeout=120)  # 2 minutes
+        ffmpeg_returncode = ffmpeg_proc.wait(timeout=120)  # 2 minutes
 
         # Remove from active processes when done
         with active_playback_lock:

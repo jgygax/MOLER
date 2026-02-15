@@ -1,0 +1,21 @@
+{
+  "vplotter": {
+    "speed_up": 0.07,
+    "speed_down": 0.07,
+    "start_w": 0.4,
+    "width_variation": 0.6,
+    "x_offset_amount": 1,
+    "y_offset_amount": 0
+  },
+  "led": {
+    "innenlicht_enabled": true,
+    "brightness": 0.39
+  },
+  "audio": {
+    "enabled": false,
+    "volume": 8,
+    "idle_frequency": 30,
+    "plotting_frequency": 10,
+    "dalek_intensity": 50
+  }
+}

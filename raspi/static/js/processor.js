@@ -192,10 +192,10 @@ async function uploadAndProcess() {
             if (autoProcessToggle) {
                 // Process all styles in parallel with different priorities
                 const styles = [
-                    { name: 'clean', priority: 13 },
-                    { name: 'realistic', priority: 12 },
-                    { name: 'kawaii', priority: 11 },
-                    { name: 'full', priority: 10 }
+                    { name: 'clean', priority: 10 },
+                    { name: 'realistic', priority: 11 },
+                    { name: 'kawaii', priority: 12 },
+                    { name: 'full', priority: 13 }
                 ];
                 const jobs = await Promise.all(styles.map(style => runWorkflow(imageId, style.name, style.priority)));
 
