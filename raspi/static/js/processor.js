@@ -3,7 +3,7 @@ let isLoading = false;
 let hasMore = true;
 
 let jobToImageMap = new Map(); // jobId -> imageId
-const socket = io();
+const socket = io({ transports: ['websocket', 'polling'] });
 
 const GALLERY_GRID = document.getElementById('galleryGrid');
 const IMAGE_UPLOAD = document.getElementById('imageUpload');

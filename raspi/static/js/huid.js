@@ -1501,7 +1501,7 @@
     }
     
     function initAudioSocket(resolve, reject) {
-        state.audioSocket = io('/audio');
+        state.audioSocket = io('/audio', { transports: ['websocket', 'polling'] });
         
         state.audioSocket.on('connect', () => {
             console.log('Audio socket connected');

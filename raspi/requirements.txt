@@ -7,3 +7,5 @@ flask-socketio
 requests
 Pillow
 gunicorn
+gevent>=23.0.0
+gevent-websocket

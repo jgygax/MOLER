@@ -54,7 +54,7 @@ def load_settings():
         }
 
     try:
-        with open(SETTINGS_FILE, 'r') as f:
+        with open(SETTINGS_FILE, "r") as f:
             data = json.load(f)
 
         # Merge with defaults to ensure all keys exist (handles missing/new settings)
@@ -98,8 +98,8 @@ def save_settings(vplotter_settings=None, led_settings=None, audio_settings=None
             current["audio"].update(audio_settings)
 
         # Write to temporary file first (atomic write pattern)
-        temp_file = SETTINGS_FILE.with_suffix('.tmp')
-        with open(temp_file, 'w') as f:
+        temp_file = SETTINGS_FILE.with_suffix(".tmp")
+        with open(temp_file, "w") as f:
             json.dump(current, f, indent=2)
 
         # Atomic rename
@@ -124,36 +124,20 @@ def _get_pactl_cmd():
     The environment variables from _get_pulse_env() will handle the user context.
     """
     import shutil
-    
+
     pactl_path = shutil.which("pactl")
     if not pactl_path:
         return None
-    
+
     return [pactl_path]
 
 
 def _get_pulse_env():
-    """
-    Get environment variables for PulseAudio connection.
-    When running as sudo, we need the original user's PulseAudio socket.
-    """
-    import os
-    
+    """Get environment variables for PulseAudio/PipeWire connection."""
+
     env = os.environ.copy()
-    sudo_user = os.environ.get('SUDO_USER')
-    sudo_uid = os.environ.get('SUDO_UID')
-    
-    if sudo_user and sudo_uid:
-        # Running as sudo, set up original user's PulseAudio environment
-        user_runtime_dir = f"/run/user/{sudo_uid}"
-        
-        if os.path.exists(user_runtime_dir):
-            env['XDG_RUNTIME_DIR'] = user_runtime_dir
-            pulse_socket = f"{user_runtime_dir}/pulse/native"
-            if os.path.exists(pulse_socket):
-                env['PULSE_SERVER'] = f"unix:{pulse_socket}"
-            logger.debug(f"Using PulseAudio for user: {sudo_user} (UID: {sudo_uid})")
-    
+    env["XDG_RUNTIME_DIR"] = "/run/user/1000"  # Hardcoded for user pi
+
     return env
 
 
@@ -179,32 +163,38 @@ def set_audio_volume(volume_percent):
 
         # Use the exact bluetooth sink
         sink_name = "bluez_output.8F_DE_53_8F_0A_02.1"
-        
+
         # Get proper environment for PulseAudio
         env = _get_pulse_env()
-        
+
         # Debug info
-        current_user = os.environ.get('USER') or os.environ.get('LOGNAME') or str(os.getuid())
-        sudo_user = os.environ.get('SUDO_USER', 'none')
+        current_user = (
+            os.environ.get("USER") or os.environ.get("LOGNAME") or str(os.getuid())
+        )
+        sudo_user = os.environ.get("SUDO_USER", "none")
         logger.info(f"[DEBUG] Current user env: {current_user}, SUDO_USER: {sudo_user}")
         logger.info(f"[DEBUG] XDG_RUNTIME_DIR: {env.get('XDG_RUNTIME_DIR', 'not set')}")
         logger.info(f"[DEBUG] PULSE_SERVER: {env.get('PULSE_SERVER', 'not set')}")
-        logger.info(f"[DEBUG] Running command: {' '.join(pactl_cmd)} set-sink-volume {sink_name} {volume}%")
+        logger.info(
+            f"[DEBUG] Running command: {' '.join(pactl_cmd)} set-sink-volume {sink_name} {volume}%"
+        )
 
         result = subprocess.run(
             pactl_cmd + ["set-sink-volume", sink_name, f"{volume}%"],
             capture_output=True,
             text=True,
             timeout=5,
-            env=env
+            env=env,
         )
-        
+
         if result.returncode != 0:
-            logger.error(f"[DEBUG] Failed to set volume. Return code: {result.returncode}")
+            logger.error(
+                f"[DEBUG] Failed to set volume. Return code: {result.returncode}"
+            )
             logger.error(f"[DEBUG] Stderr: {result.stderr}")
             logger.error(f"[DEBUG] Stdout: {result.stdout}")
             return False
-        
+
         if result.stderr:
             logger.warning(f"[DEBUG] pactl stderr: {result.stderr}")
 
@@ -214,6 +204,7 @@ def set_audio_volume(volume_percent):
     except Exception as e:
         logger.error(f"Failed to set audio volume: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
         return False
 
@@ -226,55 +217,66 @@ def get_current_audio_volume():
     import subprocess
     import re
     import os
-    
+
     # Get pactl command with proper user context
     pactl_cmd = _get_pactl_cmd()
     if not pactl_cmd:
         logger.warning("pactl not found, cannot get volume")
         return None
-    
+
     try:
         # Use the exact bluetooth sink
         sink_name = "bluez_output.8F_DE_53_8F_0A_02.1"
-        
+
         # Get proper environment for PulseAudio
         env = _get_pulse_env()
-        
+
         # Debug info
-        current_user = os.environ.get('USER') or os.environ.get('LOGNAME') or str(os.getuid())
-        sudo_user = os.environ.get('SUDO_USER', 'none')
-        logger.debug(f"[DEBUG] Current user env: {current_user}, SUDO_USER: {sudo_user}")
-        logger.debug(f"[DEBUG] XDG_RUNTIME_DIR: {env.get('XDG_RUNTIME_DIR', 'not set')}")
+        current_user = (
+            os.environ.get("USER") or os.environ.get("LOGNAME") or str(os.getuid())
+        )
+        sudo_user = os.environ.get("SUDO_USER", "none")
+        logger.debug(
+            f"[DEBUG] Current user env: {current_user}, SUDO_USER: {sudo_user}"
+        )
+        logger.debug(
+            f"[DEBUG] XDG_RUNTIME_DIR: {env.get('XDG_RUNTIME_DIR', 'not set')}"
+        )
         logger.debug(f"[DEBUG] PULSE_SERVER: {env.get('PULSE_SERVER', 'not set')}")
-        logger.debug(f"[DEBUG] Running command: {' '.join(pactl_cmd)} get-sink-volume {sink_name}")
-        
+        logger.debug(
+            f"[DEBUG] Running command: {' '.join(pactl_cmd)} get-sink-volume {sink_name}"
+        )
+
         result = subprocess.run(
             pactl_cmd + ["get-sink-volume", sink_name],
             capture_output=True,
             text=True,
             timeout=5,
-            env=env
+            env=env,
         )
-        
+
         if result.returncode != 0:
-            logger.error(f"[DEBUG] Failed to get volume. Return code: {result.returncode}")
+            logger.error(
+                f"[DEBUG] Failed to get volume. Return code: {result.returncode}"
+            )
             logger.error(f"[DEBUG] Stderr: {result.stderr}")
             return None
-        
+
         # Parse volume from output like: "Volume: front-left: 26214 /  40% / -23.88 dB"
-        for line in result.stdout.split('\n'):
-            if 'Volume:' in line and '%' in line:
-                match = re.search(r'(\d+)%', line)
+        for line in result.stdout.split("\n"):
+            if "Volume:" in line and "%" in line:
+                match = re.search(r"(\d+)%", line)
                 if match:
                     volume = int(match.group(1))
                     logger.debug(f"[DEBUG] Got volume: {volume}%")
                     return volume
-        
+
         logger.warning(f"[DEBUG] Could not parse volume from output: {result.stdout}")
         return None
-        
+
     except Exception as e:
         logger.error(f"Failed to get audio volume: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
         return None

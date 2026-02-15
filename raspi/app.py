@@ -49,7 +49,8 @@ app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "secret!")
 app.config["UPLOAD_FOLDER"] = os.path.join(os.getcwd(), "uploads")
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+# Always use gevent for WebSocket support (both in Docker and direct execution)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
 
 app.register_blueprint(plotter_bp)
 app.register_blueprint(processor_bp)
@@ -93,5 +94,6 @@ start_audio_threads(socketio)
 
 
 if __name__ == "__main__":
-    logger.info("Starting Plotter Web Server...")
-    socketio.run(app, host="0.0.0.0", port=5001, allow_unsafe_werkzeug=True)
+    logger.info("Starting Plotter Web Server with gevent (WebSocket enabled)...")
+    # Use socketio.run() which properly handles WebSocket with gevent
+    socketio.run(app, host="0.0.0.0", port=5001, debug=False, use_reloader=False)

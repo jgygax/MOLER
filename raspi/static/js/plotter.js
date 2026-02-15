@@ -1,4 +1,4 @@
-const socket = io();
+const socket = io({ transports: ['websocket', 'polling'] });
 let plotterState = { x: 0, y: 0, motor_distance: 0, queue: [], is_working: false };
 let canvasBounds = { top: 0, left: 0, right: 0, bottom: 0 };
 let currentSpeed = 'medium';
