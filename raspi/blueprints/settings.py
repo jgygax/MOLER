@@ -1,13 +1,15 @@
 import logging
 from flask import Blueprint, render_template, request, jsonify
 import extensions
-from settings_storage import save_settings, get_current_audio_volume, set_audio_volume
 
 logger = logging.getLogger(__name__)
 settings_bp = Blueprint("settings", __name__)
 
-# Default settings
-DEFAULT_SETTINGS = {
+# Settings file location (in the application root directory)
+SETTINGS_FILE = "settings.json"
+
+# Default settings for VPlotter
+DEFAULT_VPLOTTER_SETTINGS = {
     "speed_up": 0.07,
     "speed_down": 0.07,
     "start_w": 0.4,
@@ -15,6 +17,185 @@ DEFAULT_SETTINGS = {
     "x_offset_amount": 1,
     "y_offset_amount": 0,
 }
+
+# Default settings for LEDs
+DEFAULT_LED_SETTINGS = {
+    "innenlicht_enabled": True,
+    "brightness": 1.0,  # 0.0 to 1.0
+}
+
+# Default settings for Audio
+DEFAULT_AUDIO_SETTINGS = {
+    "enabled": True,
+    "volume": 50,  # 0 to 100
+    "idle_frequency": 30,  # Expected seconds between sounds when idle
+    "plotting_frequency": 10,  # Expected seconds between sounds when plotting
+    "dalek_intensity": 50,  # 0 to 100 - Dalek voice effect intensity
+}
+
+
+def _get_pulse_env():
+    """Get environment variables for PulseAudio/PipeWire connection."""
+    import os
+    env = os.environ.copy()
+    env['XDG_RUNTIME_DIR'] = '/run/user/1000'  # Hardcoded for user pi
+    return env
+
+
+def load_settings():
+    """Load settings from JSON file. Returns dict with 'vplotter', 'led', 'audio' keys."""
+    import json
+    from pathlib import Path
+    
+    settings_path = Path(SETTINGS_FILE)
+    
+    if not settings_path.exists():
+        logger.info(f"Settings file not found, using defaults")
+        return {
+            "vplotter": DEFAULT_VPLOTTER_SETTINGS.copy(),
+            "led": DEFAULT_LED_SETTINGS.copy(),
+            "audio": DEFAULT_AUDIO_SETTINGS.copy(),
+        }
+
+    try:
+        with open(settings_path, "r") as f:
+            data = json.load(f)
+
+        # Merge with defaults to ensure all keys exist
+        return {
+            "vplotter": {**DEFAULT_VPLOTTER_SETTINGS, **data.get("vplotter", {})},
+            "led": {**DEFAULT_LED_SETTINGS, **data.get("led", {})},
+            "audio": {**DEFAULT_AUDIO_SETTINGS, **data.get("audio", {})},
+        }
+    except (json.JSONDecodeError, IOError) as e:
+        logger.warning(f"Failed to load settings ({e}), using defaults")
+        return {
+            "vplotter": DEFAULT_VPLOTTER_SETTINGS.copy(),
+            "led": DEFAULT_LED_SETTINGS.copy(),
+            "audio": DEFAULT_AUDIO_SETTINGS.copy(),
+        }
+
+
+def save_settings(vplotter_settings=None, led_settings=None, audio_settings=None):
+    """Save settings to JSON file using atomic write."""
+    import json
+    from pathlib import Path
+    
+    try:
+        current = load_settings()
+
+        if vplotter_settings is not None:
+            current["vplotter"].update(vplotter_settings)
+        if led_settings is not None:
+            current["led"].update(led_settings)
+        if audio_settings is not None:
+            current["audio"].update(audio_settings)
+
+        settings_path = Path(SETTINGS_FILE)
+        temp_file = settings_path.with_suffix(".tmp")
+        
+        with open(temp_file, "w") as f:
+            json.dump(current, f, indent=2)
+
+        temp_file.replace(settings_path)
+        logger.debug("Settings saved")
+        return True
+    except IOError as e:
+        logger.error(f"Failed to save settings: {e}")
+        return False
+
+
+def get_audio_settings():
+    """Get current audio settings from disk."""
+    return load_settings()["audio"]
+
+
+def _demote_to_user():
+    """Demote process to run as user pi (uid 1000)."""
+    import os
+    try:
+        os.setgid(1000)
+        os.setuid(1000)
+    except Exception:
+        pass
+
+
+def set_audio_volume(volume_percent):
+    """Set system audio volume using pactl on the bluetooth speaker."""
+    import subprocess
+    import shutil
+    import os
+    
+    pactl_path = shutil.which("pactl")
+    if not pactl_path:
+        logger.warning("pactl not found, cannot set volume")
+        return False
+
+    try:
+        volume = max(0, min(100, int(volume_percent)))
+        sink_name = "bluez_output.8F_DE_53_8F_0A_02.1"
+        env = _get_pulse_env()
+
+        result = subprocess.run(
+            [pactl_path, "set-sink-volume", sink_name, f"{volume}%"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env=env,
+            preexec_fn=_demote_to_user if os.getuid() == 0 else None,
+        )
+
+        if result.returncode == 0:
+            logger.info(f"Audio volume set to {volume}%")
+            return True
+        else:
+            logger.error(f"Failed to set volume: {result.stderr}")
+            return False
+    except Exception as e:
+        logger.error(f"Failed to set audio volume: {e}")
+        return False
+
+
+def get_current_audio_volume():
+    """Get current system audio volume from the bluetooth speaker. Returns 0-100 or None."""
+    import subprocess
+    import re
+    import shutil
+    import os
+    
+    pactl_path = shutil.which("pactl")
+    if not pactl_path:
+        logger.warning("pactl not found, cannot get volume")
+        return None
+
+    try:
+        sink_name = "bluez_output.8F_DE_53_8F_0A_02.1"
+        env = _get_pulse_env()
+
+        result = subprocess.run(
+            [pactl_path, "get-sink-volume", sink_name],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env=env,
+            preexec_fn=_demote_to_user if os.getuid() == 0 else None,
+        )
+
+        if result.returncode != 0:
+            logger.error(f"Failed to get volume: {result.stderr}")
+            return None
+
+        # Parse volume from output like: "Volume: front-left: 26214 /  40% / -23.88 dB"
+        for line in result.stdout.split("\n"):
+            if "Volume:" in line and "%" in line:
+                match = re.search(r"(\d+)%", line)
+                if match:
+                    return int(match.group(1))
+
+        return None
+    except Exception as e:
+        logger.error(f"Failed to get audio volume: {e}")
+        return None
 
 
 def get_settings():
@@ -105,7 +286,6 @@ def settings_api():
 @settings_bp.route("/settings/reset", methods=["POST"])
 def reset_settings():
     """Reset settings to defaults."""
-    from settings_storage import DEFAULT_VPLOTTER_SETTINGS
     extensions.vplotter_settings = DEFAULT_VPLOTTER_SETTINGS.copy()
     applied = apply_settings_to_plotter()
     

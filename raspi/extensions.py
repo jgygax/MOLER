@@ -1,5 +1,5 @@
 import threading
-from settings_storage import load_settings, DEFAULT_VPLOTTER_SETTINGS, DEFAULT_LED_SETTINGS, DEFAULT_AUDIO_SETTINGS
+from blueprints.settings import load_settings, DEFAULT_VPLOTTER_SETTINGS, DEFAULT_LED_SETTINGS, DEFAULT_AUDIO_SETTINGS
 
 # Shared Locks and Lists
 job_lock = threading.Lock()

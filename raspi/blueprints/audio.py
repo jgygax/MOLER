@@ -32,10 +32,9 @@ else:
 AUDIO_MOCK_FOLDER = os.path.join(os.getcwd(), "uploads", "audio_mock")
 os.makedirs(AUDIO_MOCK_FOLDER, exist_ok=True)
 
-# Get the original user when running with sudo (same as soundboard.py)
-ORIGINAL_USER = os.environ.get('SUDO_USER')
-ORIGINAL_UID = os.environ.get('SUDO_UID')
-ORIGINAL_GID = os.environ.get('SUDO_GID')
+# Hardcoded user info for systemctl service (user pi = uid 1000)
+ORIGINAL_UID = "1000"
+ORIGINAL_GID = "1000"
 
 # Track active audio sessions
 active_sessions = {}
@@ -43,21 +42,9 @@ sessions_lock = threading.Lock()
 
 
 def _get_pulse_env():
-    """Get environment variables for PulseAudio connection when running as root."""
+    """Get environment variables for PulseAudio connection."""
     env = os.environ.copy()
-    
-    if ORIGINAL_UID:
-        # Running as sudo, set up original user's PulseAudio environment
-        user_runtime_dir = f"/run/user/{ORIGINAL_UID}"
-        
-        if os.path.exists(user_runtime_dir):
-            env['XDG_RUNTIME_DIR'] = user_runtime_dir
-            # Set PulseAudio socket path
-            pulse_socket = f"{user_runtime_dir}/pulse/native"
-            if os.path.exists(pulse_socket):
-                env['PULSE_SERVER'] = f"unix:{pulse_socket}"
-            logger.debug(f"Using PulseAudio for user: {ORIGINAL_USER} (UID: {ORIGINAL_UID})")
-    
+    env['XDG_RUNTIME_DIR'] = '/run/user/1000'  # Hardcoded for user pi
     return env
 
 
@@ -463,7 +450,7 @@ def intensity_api():
         # Update settings
         try:
             import extensions
-            from settings_storage import save_settings
+            from blueprints.settings import save_settings
             extensions.audio_settings["dalek_intensity"] = intensity
             save_settings(audio_settings=extensions.audio_settings)
             logger.info(f"Dalek intensity updated to {intensity}%")
