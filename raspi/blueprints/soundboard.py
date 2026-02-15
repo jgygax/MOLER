@@ -11,7 +11,7 @@ import random
 import time
 from pathlib import Path
 from collections import deque
-from flask import Blueprint, render_template, jsonify, request
+from flask import Blueprint, render_template, jsonify, request, send_from_directory
 import extensions
 
 logger = logging.getLogger(__name__)
@@ -84,6 +84,25 @@ def get_folders_api():
     """API endpoint to get all folders and their sound files."""
     folders = get_sfx_folders()
     return jsonify({"folders": folders})
+
+
+@soundboard_bp.route("/soundboard/api/audio/<path:filepath>")
+def serve_audio(filepath):
+    """Serve audio files for local browser playback."""
+    # Validate the filepath is within sfx directory
+    try:
+        full_path = (SFX_DIR.parent / filepath).resolve()
+        sfx_root = SFX_DIR.resolve()
+        if not str(full_path).startswith(str(sfx_root)):
+            return jsonify({"error": "Invalid filepath"}), 400
+    except Exception:
+        return jsonify({"error": "Invalid filepath"}), 400
+    
+    # Get the directory and filename
+    directory = full_path.parent
+    filename = full_path.name
+    
+    return send_from_directory(directory, filename)
 
 
 @soundboard_bp.route("/soundboard/api/play", methods=["POST"])

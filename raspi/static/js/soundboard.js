@@ -1,11 +1,39 @@
 // Soundboard functionality
 let folders = [];
 let currentlyPlaying = null;
+let localAudioPlayer = null;
+let isLocalPlayback = false;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     loadFolders();
+    loadPlaybackMode();
 });
+
+// Load saved playback mode preference
+function loadPlaybackMode() {
+    const saved = localStorage.getItem('soundboard-playback-mode');
+    if (saved === 'local') {
+        isLocalPlayback = true;
+        document.getElementById('playback-mode-toggle').checked = true;
+        document.getElementById('playback-mode-label').textContent = 'Local';
+    }
+}
+
+// Toggle between local and RasPi playback
+function togglePlaybackMode() {
+    const toggle = document.getElementById('playback-mode-toggle');
+    const label = document.getElementById('playback-mode-label');
+    
+    isLocalPlayback = toggle.checked;
+    label.textContent = isLocalPlayback ? 'Local' : 'RasPi';
+    
+    // Save preference
+    localStorage.setItem('soundboard-playback-mode', isLocalPlayback ? 'local' : 'raspi');
+    
+    // Stop any current playback when switching modes
+    stopPlayback();
+}
 
 async function loadFolders() {
     try {
@@ -59,6 +87,47 @@ async function playSound(filepath, name, element) {
     // Update UI to show playing state
     setPlayingState(filepath, name, element);
     
+    if (isLocalPlayback) {
+        // Play locally in browser
+        playLocalSound(filepath, name);
+    } else {
+        // Play on RasPi
+        await playRasPiSound(filepath, name);
+    }
+}
+
+function playLocalSound(filepath, name) {
+    // Convert filepath to URL for browser playback
+    // filepath is like "r2d2/sound.mp3" or "songs/music.mp3"
+    const audioUrl = `/soundboard/api/audio/${filepath}`;
+    
+    // Stop any existing local playback
+    if (localAudioPlayer) {
+        localAudioPlayer.pause();
+        localAudioPlayer.currentTime = 0;
+    }
+    
+    // Create new audio player
+    localAudioPlayer = new Audio(audioUrl);
+    
+    localAudioPlayer.onended = () => {
+        clearPlayingState();
+    };
+    
+    localAudioPlayer.onerror = (e) => {
+        console.error('Error playing audio:', e);
+        clearPlayingState();
+        showError('Failed to play sound locally');
+    };
+    
+    localAudioPlayer.play().catch(err => {
+        console.error('Error starting playback:', err);
+        clearPlayingState();
+        showError('Failed to play sound');
+    });
+}
+
+async function playRasPiSound(filepath, name) {
     try {
         const response = await fetch('/soundboard/api/play', {
             method: 'POST',
@@ -69,9 +138,7 @@ async function playSound(filepath, name, element) {
         const result = await response.json();
         
         if (result.status === 'playing') {
-            // Sound is playing - the server will handle it
-            // We'll clear the playing state after a reasonable timeout
-            // since we don't have real-time feedback when it finishes
+            // Sound is playing on RasPi - clear state after estimated duration
             setTimeout(() => {
                 clearPlayingState();
             }, 10000); // Clear after 10 seconds as fallback
@@ -113,6 +180,13 @@ function setPlayingState(filepath, name, element) {
 function clearPlayingState() {
     currentlyPlaying = null;
     
+    // Stop local playback if active
+    if (localAudioPlayer) {
+        localAudioPlayer.pause();
+        localAudioPlayer.currentTime = 0;
+        localAudioPlayer = null;
+    }
+    
     // Remove playing class from all items
     document.querySelectorAll('.sound-item.playing').forEach(item => {
         item.classList.remove('playing');
@@ -131,6 +205,13 @@ function clearPlayingState() {
 }
 
 async function stopPlayback() {
+    if (isLocalPlayback && localAudioPlayer) {
+        // Stop local playback
+        clearPlayingState();
+        return;
+    }
+    
+    // Stop RasPi playback
     try {
         const response = await fetch('/soundboard/api/stop', {
             method: 'POST',
