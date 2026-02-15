@@ -27,6 +27,7 @@ from blueprints.audio import (
     start_background_threads as start_audio_threads,
 )
 from blueprints.soundboard import soundboard_bp, init_sfx_player
+from utils.static_manager import ensure_static_files
 
 load_dotenv()
 
@@ -39,6 +40,9 @@ logging.basicConfig(
 logging.getLogger("PIL").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
+
+# Ensure static dependencies are available (downloads on first run)
+ensure_static_files()
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "secret!")
