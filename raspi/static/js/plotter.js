@@ -7,9 +7,9 @@ let currentSpeed = 'medium';
 let lastQueueState = '';
 
 const SPEEDS = {
-    slow: { steps: 50, servo: 0.05, dist: 3 },
-    medium: { steps: 300, servo: 0.10, dist: 30 },
-    fast: { steps: 1000, servo: 0.50, dist: 100 }
+    slow: { steps: 10, servo: 0.01, dist: 1 },
+    medium: { steps: 50, servo: 0.05, dist: 3 },
+    fast: { steps: 300, servo: 0.10, dist: 30 },
 };
 
 socket.on('config', (b) => canvasBounds = b);
