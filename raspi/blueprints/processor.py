@@ -12,6 +12,7 @@ from flask import (
     current_app,
     send_from_directory,
     send_file,
+    make_response,
 )
 from werkzeug.utils import secure_filename
 from pathlib import Path
@@ -277,7 +278,11 @@ def list_images():
 
 @processor_bp.route("/processor/serve/<path:filename>")
 def serve_image(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
+    """Serve uploaded/processed images with aggressive caching."""
+    response = make_response(send_from_directory(UPLOAD_FOLDER, filename))
+    # Cache for 1 year - these files never change once created
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
 
 
 @processor_bp.route("/processor/run_workflow", methods=["POST"])
@@ -626,18 +631,26 @@ def _get_artifact_path_by_slug(job_id, slug):
 
 @processor_bp.route("/processor/artifact/<job_id>/<slug>", methods=["GET"])
 def get_artifact(job_id, slug):
+    """Serve artifacts (YAML, images, etc.) with aggressive caching."""
     local_path = _get_artifact_path_by_slug(job_id, slug)
     if local_path:
-        return send_file(local_path)
+        response = make_response(send_file(local_path))
+        # Cache for 1 year - artifacts never change once created
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
     return jsonify({"error": "Artifact not found"}), 404
 
 
 @processor_bp.route("/processor/artifact_by_hash/<job_id>/<file_hash>", methods=["GET"])
 def get_artifact_by_hash(job_id, file_hash):
+    """Serve artifacts by hash with aggressive caching."""
     slug_hint = request.args.get("slug", "artifact")
     local_path = _get_artifact_path(job_id, file_hash, slug_hint)
     if local_path:
-        return send_file(local_path)
+        response = make_response(send_file(local_path))
+        # Cache for 1 year - artifacts never change once created
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
     return jsonify({"error": "Artifact not found"}), 404
 
 

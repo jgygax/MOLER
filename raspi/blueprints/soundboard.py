@@ -11,7 +11,7 @@ import random
 import time
 from pathlib import Path
 from collections import deque
-from flask import Blueprint, render_template, jsonify, request, send_from_directory
+from flask import Blueprint, render_template, jsonify, request, send_from_directory, make_response
 import extensions
 
 logger = logging.getLogger(__name__)
@@ -102,7 +102,10 @@ def serve_audio(filepath):
     directory = full_path.parent
     filename = full_path.name
     
-    return send_from_directory(directory, filename)
+    response = make_response(send_from_directory(directory, filename))
+    # Cache for 1 year - audio files never change
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
 
 
 @soundboard_bp.route("/soundboard/api/play", methods=["POST"])
