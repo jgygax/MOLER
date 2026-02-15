@@ -1,3 +1,11 @@
 playground
 __pycache__
 plot_patterns
+.venv
+.env
+uploads
+job_history.json
+audio_tests
+test_*
+settings.json
+raspi/sfx/songs

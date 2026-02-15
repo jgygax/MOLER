@@ -1,0 +1,385 @@
+/* HUID - Minimal Transparent HUD Design */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+body {
+    background: #000;
+    overflow: hidden;
+    touch-action: none;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Wrapper takes full screen - pure black background */
+#huid-wrapper {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+    z-index: 9999;
+}
+
+/* Content Bounds - Everything stays inside this vertical region */
+#content-bounds {
+    position: absolute;
+    top: var(--y-start, 10%);
+    left: 0;
+    width: 100%;
+    height: calc(var(--y-end, 90%) - var(--y-start, 10%));
+    overflow: hidden;
+    background: #000;
+}
+
+/* Main container - now inside bounds */
+#huid-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* Camera always in background - full screen within bounds */
+#camera-video {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    min-width: 100%;
+    min-height: 100%;
+    width: auto;
+    height: auto;
+    transform: translate(-50%, -50%) scale(1);
+    transform-origin: center center;
+    object-fit: cover;
+    z-index: 1;
+}
+
+#capture-canvas {
+    display: none;
+}
+
+/* Overlay container for images and crop visualization */
+#overlay-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%;
+    height: 70%;
+    z-index: 5;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+#overlay-container.visible {
+    display: flex;
+}
+
+/* Overlay for timeline/gallery images */
+#overlay-image {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    background: rgba(0, 0, 0, 0.3);
+}
+
+/* Crop visualization overlay - positioned dynamically to match actual image */
+#crop-overlay {
+    position: absolute;
+    pointer-events: none;
+    z-index: 6;
+    box-sizing: border-box;
+}
+
+/* The crop area (what's kept) - shown with a red border frame */
+#crop-overlay::before {
+    content: '';
+    position: absolute;
+    top: var(--crop-top-display, 0px);
+    left: var(--crop-left-display, 0px);
+    right: var(--crop-right-display, 0px);
+    bottom: var(--crop-bottom-display, 0px);
+    border: 3px solid #ff0000;
+    box-shadow: 0 0 10px rgba(255, 0, 0, 0.8), inset 0 0 20px rgba(255, 0, 0, 0.2);
+    pointer-events: none;
+}
+
+/* Mask the cropped-out areas */
+.crop-mask-top,
+.crop-mask-bottom,
+.crop-mask-left,
+.crop-mask-right {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+}
+
+.crop-mask-top {
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--crop-top-display, 0px);
+}
+
+.crop-mask-bottom {
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: var(--crop-bottom-display, 0px);
+}
+
+.crop-mask-left {
+    top: var(--crop-top-display, 0px);
+    bottom: var(--crop-bottom-display, 0px);
+    left: 0;
+    width: var(--crop-left-display, 0px);
+}
+
+.crop-mask-right {
+    top: var(--crop-top-display, 0px);
+    bottom: var(--crop-bottom-display, 0px);
+    right: 0;
+    width: var(--crop-right-display, 0px);
+}
+
+/* UI Container - ALL UI elements go here */
+#ui-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    pointer-events: none;
+}
+
+#ui-container > * {
+    pointer-events: auto;
+}
+
+/* Top Bar - Mode Selection - at top of UI container */
+#top-bar {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 6px 12px;
+    border-radius: 20px;
+    backdrop-filter: blur(4px);
+}
+
+.mode-btn {
+    padding: 10px 14px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: all 0.15s ease;
+    font-family: system-ui, -apple-system, sans-serif;
+    min-width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mode-btn:hover {
+    border-color: rgba(255, 255, 255, 0.4);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+/* Blue = Hovering (navigating to) */
+.mode-btn.blue {
+    border-color: rgba(0, 200, 255, 0.8);
+    box-shadow: 0 0 10px rgba(0, 200, 255, 0.8), 0 0 20px rgba(0, 200, 255, 0.4);
+    color: rgba(200, 240, 255, 1);
+}
+
+/* Green = Selected/Active mode */
+.mode-btn.green {
+    border-color: rgba(0, 255, 100, 0.8);
+    color: rgba(200, 255, 220, 1);
+    background: rgba(0, 255, 100, 0.1);
+}
+
+/* Green + glow when selected AND hovered */
+.mode-btn.green.blue {
+    border-color: rgba(0, 255, 100, 0.8);
+    box-shadow: 0 0 10px rgba(0, 255, 100, 0.8), 0 0 20px rgba(0, 255, 100, 0.4);
+    color: rgba(200, 255, 220, 1);
+}
+
+/* Bottom Bar - Context Controls - at bottom of UI container */
+#bottom-bar {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 6px 12px;
+    border-radius: 20px;
+    backdrop-filter: blur(4px);
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 95%;
+}
+
+.control-btn {
+    padding: 8px 12px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 10px;
+    transition: all 0.15s ease;
+    font-family: system-ui, -apple-system, sans-serif;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.control-btn:hover {
+    border-color: rgba(255, 255, 255, 0.4);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+/* Blue = Hovering (navigating to) */
+.control-btn.blue {
+    border-color: rgba(0, 200, 255, 0.8);
+    box-shadow: 0 0 10px rgba(0, 200, 255, 0.8), 0 0 20px rgba(0, 200, 255, 0.4);
+    color: rgba(200, 240, 255, 1);
+}
+
+/* Green = Selected/Active control */
+.control-btn.green {
+    border-color: rgba(0, 255, 100, 0.8);
+    color: rgba(200, 255, 220, 1);
+    background: rgba(0, 255, 100, 0.1);
+}
+
+/* Green + glow when selected AND hovered */
+.control-btn.green.blue {
+    border-color: rgba(0, 255, 100, 0.8);
+    box-shadow: 0 0 10px rgba(0, 255, 100, 0.8), 0 0 20px rgba(0, 255, 100, 0.4);
+    color: rgba(200, 255, 220, 1);
+}
+
+/* Yellow/Gold = Options/Selectors */
+.control-btn.yellow {
+    border-color: rgba(255, 204, 0, 0.8);
+    box-shadow: 0 0 10px rgba(255, 204, 0, 0.8), 0 0 20px rgba(255, 204, 0, 0.4);
+    color: rgba(255, 240, 200, 1);
+}
+
+/* Red/Coral = Actions */
+.control-btn.red {
+    border-color: rgba(255, 85, 85, 0.8);
+    box-shadow: 0 0 10px rgba(255, 85, 85, 0.8), 0 0 20px rgba(255, 85, 85, 0.4);
+    color: rgba(255, 220, 220, 1);
+}
+
+/* Status text overlay - below top bar */
+.status-overlay {
+    position: absolute;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 14px;
+    font-weight: 500;
+    font-family: system-ui, -apple-system, sans-serif;
+    z-index: 10;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 8px 16px;
+    border-radius: 12px;
+    pointer-events: none;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Timeline progress bar - above bottom bar (moved higher to not be covered) */
+.timeline-bar {
+    position: absolute;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    display: none;
+}
+
+.timeline-bar.visible {
+    display: block;
+}
+
+.timeline-progress {
+    height: 100%;
+    background: rgba(0, 255, 100, 0.8);
+    border-radius: 2px;
+    transition: width 0.1s ease;
+}
+
+/* Lock mode - disabled state */
+.locked #ui-container {
+    opacity: 0.3;
+    pointer-events: none;
+}
+
+/* Lock mode - video stays in color for HUD visibility */
+
+/* Hide scrollbars */
+::-webkit-scrollbar {
+    display: none;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .mode-btn {
+        padding: 8px 10px;
+        font-size: 14px;
+        min-width: 36px;
+    }
+    
+    .control-btn {
+        padding: 6px 8px;
+        font-size: 11px;
+    }
+    
+    #top-bar, #bottom-bar {
+        padding: 4px 8px;
+        gap: 4px;
+    }
+    
+    #bottom-bar {
+        max-width: 98%;
+    }
+    
+    .status-overlay {
+        font-size: 12px;
+        padding: 6px 12px;
+        top: 55px;
+    }
+}

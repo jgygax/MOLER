@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/glightbox/dist/css/glightbox.min.css" />
+<style>
+    /* Additional inline styles to complement style.css if needed */
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.9);
+        overflow-y: auto;
+    }
+
+    .modal-content {
+        background-color: #1a1a1a;
+        margin: 5% auto;
+        padding: 20px;
+        border: 1px solid #333;
+        width: 90%;
+        max-width: 1000px;
+        border-radius: 8px;
+        position: relative;
+    }
+
+    .close-modal {
+        position: absolute;
+        right: 20px;
+        top: 10px;
+        color: #888;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    .modal-gallery {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 15px;
+        margin-top: 20px;
+    }
+
+    .modal-image-card {
+        background: #000;
+        border-radius: 4px;
+        overflow: hidden;
+        border: 1px solid #333;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .modal-image-card img {
+        width: 100%;
+        height: 150px;
+        object-fit: contain;
+    }
+
+    .modal-image-card .label {
+        padding: 5px;
+        font-size: 0.7rem;
+        text-align: center;
+        background: #222;
+        color: #aaa;
+    }
+
+    .status-header {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 25%;
+        background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        color: white;
+        z-index: 10;
+        pointer-events: none;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+
+    .status-header .status-title {
+        font-weight: bold;
+        font-size: 1.1rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .status-header .status-tag {
+        font-size: 0.7rem;
+        opacity: 0.8;
+        margin-top: 2px;
+        padding: 2px 8px;
+        border-radius: 10px;
+    }
+
+    .status-header.completed .status-tag { background: rgba(40, 167, 69, 0.4); }
+    .status-header.pending .status-tag { background: rgba(255, 193, 7, 0.4); color: #000; }
+    .status-header.failed .status-tag { background: rgba(220, 53, 69, 0.4); }
+    .status-header.idle .status-tag { background: rgba(108, 117, 125, 0.4); }
+
+    .workflow-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid #333;
+        flex-wrap: wrap;
+    }
+
+    .workflow-actions button {
+        flex: 1;
+        min-width: 120px;
+    }
+
+    .auto-process-bar {
+        background: #1a1a1a;
+        padding: 10px 15px;
+        border-radius: 6px;
+        border: 1px solid #333;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .controls-panel {
+        flex: 0 0 auto;
+        display: flex;
+        flex-direction: column;
+        background: #0a0a0a;
+    }
+
+    .preference-bar {
+        background: #1a1a1a;
+        padding: 10px 15px;
+        border-radius: 6px;
+        border: 1px solid #333;
+        margin: 15px 15px 0 15px;
+    }
+
+    .controls-panel .upload-panel {
+        flex: 1;
+        background: #0a0a0a;
+        padding: 15px;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        min-height: 0;
+    }
+
+    .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 20px;
+    }
+
+    .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #333;
+        transition: .4s;
+        border-radius: 20px;
+    }
+
+    .slider:before {
+        position: absolute;
+        content: "";
+        height: 14px;
+        width: 14px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+    }
+
+    input:checked+.slider {
+        background-color: var(--accent);
+    }
+
+    input:checked+.slider:before {
+        transform: translateX(20px);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="processor-container">
+    <div class="controls-panel">
+        <div class="preference-bar">
+            <select id="preferenceSelect" style="width: 100%; padding: 8px; font-size: 0.8rem; background: #222; border: 1px solid #444; color: #fff; border-radius: 4px;">
+                <option value="clean">Clean</option>
+                <option value="realistic">Realistic</option>
+                <option value="kawaii">Cute</option>
+                <option value="full">Full</option>
+            </select>
+        </div>
+
+        <div class="upload-panel">
+            <label for="imageUpload" class="custom-file-upload">
+                <div id="preview-box">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <span>Tap to select photo</span>
+                </div>
+                <input type="file" id="imageUpload" accept="image/*" capture="environment" style="display: none;">
+            </label>
+
+            <div class="auto-process-bar">
+                <div style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="autoProcessToggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span style="font-size: 0.8rem;">Auto Process All Styles</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="gallery-panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h2>Recent Images</h2>
+            <button onclick="loadImages(true)" class="btn-sm"><i class="fas fa-sync-alt"></i></button>
+        </div>
+
+        <div id="galleryGrid" class="gallery-grid">
+            <!-- Images will be loaded here -->
+            <div class="empty-msg">No images found. Upload something to get started!</div>
+        </div>
+
+        <div id="loadingIndicator" style="display: none; text-align: center; padding: 20px;">
+            <i class="fas fa-spinner fa-spin"></i> Loading...
+        </div>
+    </div>
+</div>
+
+<!-- Toast Notifications -->
+<div id="toast-container"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/gh/mcstudios/glightbox/dist/js/glightbox.min.js"></script>
+<script src="{{ url_for('static', filename='js/processor.js') }}"></script>
+{% endblock %}

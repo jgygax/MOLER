@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="menu-container">
+    <a href="{{ url_for('plotter.index') }}" class="menu-card">
+        <i class="fas fa-draw-polygon"></i>
+        <span>Live Plotter Control</span>
+    </a>
+    <a href="/processor" class="menu-card">
+        <i class="fas fa-magic"></i>
+        <span>AI Picture Processing</span>
+    </a>
+    <a href="{{ url_for('settings.index') }}" class="menu-card">
+        <i class="fas fa-cog"></i>
+        <span>Settings</span>
+    </a>
+    <a href="{{ url_for('huid.index') }}" class="menu-card">
+        <i class="fas fa-vr-cardboard"></i>
+        <span>HUID VR Mode</span>
+    </a>
+</div>
+{% endblock %}
