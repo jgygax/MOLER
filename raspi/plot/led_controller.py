@@ -25,7 +25,7 @@ LED_CHANNEL = 0
 LED_PIN_GONDOLA = 18
 LED_COUNT_GONDOLA = 1
 # Update delay (~33 FPS)
-DELAY = 0.03
+DELAY = 0.06
 # LED Zones
 ZONES = {
     "van-gogh": {"start": 0, "end": 24, "count": 25},
