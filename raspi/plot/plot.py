@@ -51,9 +51,9 @@ def plot_pattern(plotter, pattern, stop_event=None):
 
     total_lines = len(pattern["lines"])
     total_distance = 0
-    
+
     home_distance = pattern.get("metadata", {}).get("home_distance", 1000000)
-    
+
     # Set plotting state
     plotter.is_plotting = True
     plotter.plot_finished = False
@@ -66,7 +66,7 @@ def plot_pattern(plotter, pattern, stop_event=None):
 
         total_distance += line["length"]
         points = line["points"]
-        
+
         # Update progress tracking
         plotter.current_line_index = line_idx
         plotter.plot_progress = line_idx / total_lines if total_lines > 0 else 0.0
@@ -75,7 +75,6 @@ def plot_pattern(plotter, pattern, stop_event=None):
         start_x, start_y = points[0]["x"], points[0]["y"]
         plotter.pen_up()
         plotter.move_straight_line(start_x, start_y)
-        plotter.pen_down()
 
         # Plot points
         num_points = len(points)
@@ -84,16 +83,19 @@ def plot_pattern(plotter, pattern, stop_event=None):
                 break
             x, y, w = point["x"], point["y"], point["w"]
             plotter.move_straight_line(x, y, w)
-            
+
             # Update current line progress
-            plotter.current_line_progress = (point_idx + 1) / num_points if num_points > 0 else 0.0
+            plotter.current_line_progress = (
+                (point_idx + 1) / num_points if num_points > 0 else 0.0
+            )
 
         plotter.pen_up()
 
         if home_distance and total_distance > home_distance:
+            execute_move_sequence(plotter, "start", stop_event, speed_mulitplier=1)
             execute_move_sequence(plotter, "dock", stop_event, speed_mulitplier=1)
             total_distance = 0
-    
+
     # Mark plotting as finished
     plotter.is_plotting = False
     plotter.plot_finished = True

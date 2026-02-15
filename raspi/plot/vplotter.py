@@ -28,23 +28,22 @@ class StepperMotor:
         [1, 0, 0, 1],
     ]
 
+    SPOOL_CIRCUMFERENCE = 125
+    STEPS_PER_REVOLUTION = 4096
+
     def __init__(
         self,
         pins,
         speed_up=1,
         speed_down=1,
         up_direction=1,
-        initial_string_length=0,
-        spool_circumference=12.5,
-        steps_per_revolution=4096,
+        initial_string_length=100,
     ):
         self.pins = pins
         self.speed_up = speed_up
         self.speed_down = speed_down
         self.up_direction = up_direction
         self.initial_string_length = initial_string_length
-        self.spool_circumference = spool_circumference
-        self.steps_per_revolution = steps_per_revolution
         self.revolutions = self.get_revolutions(initial_string_length)
 
         self.index = 0
@@ -69,7 +68,7 @@ class StepperMotor:
         if speed_mulitplier is not None:
             speed *= speed_mulitplier
 
-        update_interval = 1 / (self.steps_per_revolution * speed)
+        update_interval = 1 / (self.STEPS_PER_REVOLUTION * speed)
 
         for _ in range(count):
             current_time = time.time()
@@ -83,13 +82,13 @@ class StepperMotor:
                 GPIO.output(pin, value)
 
             self.revolutions += (
-                self.up_direction * direction / self.steps_per_revolution
+                self.up_direction * direction / self.STEPS_PER_REVOLUTION
             )
 
     def count_steps_to_target(self, target_string_length):
         return round(
             abs(self.get_revolutions(target_string_length) - self.revolutions)
-            * self.steps_per_revolution
+            * self.STEPS_PER_REVOLUTION
         )
 
     def move_to_target(self, target_string_length, speed_mulitplier=None):
@@ -106,17 +105,17 @@ class StepperMotor:
         )
 
     def get_revolutions(self, string_length):
-        return string_length / self.spool_circumference
+        return string_length / self.SPOOL_CIRCUMFERENCE
 
     def get_string_length(self):
-        return self.revolutions * self.spool_circumference
+        return self.revolutions * self.SPOOL_CIRCUMFERENCE
 
 
 class VPlotter:
     MOTOR_PINS = {
         0: [23, 24, 25, 8],  # Left motor pins
         1: [5, 6, 13, 26],  # Right motor pins
-    }   
+    }
     SPEED_UP = 0.07
     SPEED_DOWN = 0.07
     MOTOR_DISTANCE = 400  # mm
@@ -126,8 +125,7 @@ class VPlotter:
     # For 50Hz servo: 2.5% duty = 0.5ms pulse = 0°, 12.5% duty = 2.5ms pulse = 180°
     PEN_UP_DUTY = 12  # Adjust these values (2.5-12.5) based on your servo
     PEN_DOWN_DUTY = 2  # Adjust these values (2.5-12.5) based on your servo
-    STEPS_PER_REVOLUTION = 4096
-    SPOOL_CIRCUMFERENCE = 125  # mm
+
     PIXELS_PER_MM = 1  # mm
     MAX_CIRCLE_DIAMETER = 1  # mm
     X_OFFSET_AMOUNT = 1  # mm offset per 100mm vertical
@@ -164,8 +162,6 @@ class VPlotter:
             self.SPEED_DOWN,
             -1,
             s_left,
-            self.SPOOL_CIRCUMFERENCE,
-            self.STEPS_PER_REVOLUTION,
         )
         self.right_motor = StepperMotor(
             self.MOTOR_PINS[1],
@@ -173,8 +169,6 @@ class VPlotter:
             self.SPEED_DOWN,
             1,
             s_right,
-            self.SPOOL_CIRCUMFERENCE,
-            self.STEPS_PER_REVOLUTION,
         )
 
         self.canvas_width = int(VPlotter.MOTOR_DISTANCE * VPlotter.PIXELS_PER_MM)
@@ -327,12 +321,11 @@ class VPlotter:
         """Move to target position in a straight line with smooth interpolation."""
 
         start_x, start_y = self.get_current_coords()
+        start_w = self.w
 
         target_x = start_x if x is None else x
         target_y = start_y if y is None else y
         target_w = self.w if w is None else w
-
-        start_w = self.w
 
         # Calculate offset to compensate for lag
         dx = target_x - self.lag_x
@@ -385,7 +378,10 @@ class VPlotter:
             if w < 0.1:
                 w_mapped = max(0, VPlotter.START_W - 0.1)
             else:
-                w_mapped = VPlotter.START_W + (1 - VPlotter.START_W) * w * VPlotter.WIDTH_VARIATION
+                w_mapped = (
+                    VPlotter.START_W
+                    + (1 - VPlotter.START_W) * w * VPlotter.WIDTH_VARIATION
+                )
             duty_cycle = self.interpolate(
                 VPlotter.PEN_UP_DUTY, VPlotter.PEN_DOWN_DUTY, w_mapped
             )
